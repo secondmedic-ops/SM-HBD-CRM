@@ -1,0 +1,7 @@
+{
+  "name": "SecondMedic CRM – Mohan's Team",
+  "description": "Sales, revenue and staff-performance tracker for a healthcare business-development team.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
