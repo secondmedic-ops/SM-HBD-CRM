@@ -91,7 +91,7 @@
     },
     "/api/v1/staff": {
       "get": {
-        "summary": "Active staff (email and login status only for ADMIN)",
+        "summary": "Active staff with their incharge (email and login status: ADMIN, INCHARGE for own team)",
         "x-access": [
           "ADMIN",
           "ACCOUNTS",
@@ -105,9 +105,10 @@
         }
       },
       "post": {
-        "summary": "Add a staff member",
+        "summary": "Add a staff member (INCHARGE: a Team member of their own team)",
         "x-access": [
-          "ADMIN"
+          "ADMIN",
+          "INCHARGE"
         ],
         "responses": {
           "201": {
@@ -118,9 +119,10 @@
     },
     "/api/v1/staff/{id}": {
       "put": {
-        "summary": "Change a staff member (only the fields sent)",
+        "summary": "Change a staff member (only the fields sent; INCHARGE: own team, no role / dept / incharge)",
         "x-access": [
-          "ADMIN"
+          "ADMIN",
+          "INCHARGE"
         ],
         "responses": {
           "200": {
@@ -129,9 +131,10 @@
         }
       },
       "delete": {
-        "summary": "Remove a staff member (past entries stay)",
+        "summary": "Remove a staff member (past entries stay; INCHARGE: own team)",
         "x-access": [
-          "ADMIN"
+          "ADMIN",
+          "INCHARGE"
         ],
         "responses": {
           "204": {
@@ -450,9 +453,10 @@
     },
     "/api/v1/admin/logins": {
       "post": {
-        "summary": "Create a login or set its password ({email, password})",
+        "summary": "Create a login or set its password ({email, password}; INCHARGE: own team)",
         "x-access": [
-          "ADMIN"
+          "ADMIN",
+          "INCHARGE"
         ],
         "responses": {
           "200": {

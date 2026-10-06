@@ -147,6 +147,7 @@
 | active | boolean | NO |
 | created_at | timestamp with time zone | NO |
 | updated_at | timestamp with time zone | NO |
+| incharge_id | uuid | YES |
 
 ## user_roles
 | column | type | nullable |
