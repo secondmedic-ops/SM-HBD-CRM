@@ -11,6 +11,7 @@ import { DailyUpdatesTab } from './components/DailyUpdatesTab';
 import { OutstandingTab } from './components/OutstandingTab';
 import { StaffMappingTab } from './components/StaffMappingTab';
 import { ClientsTab } from './components/ClientsTab';
+import { MyTeamTab } from './components/MyTeamTab';
 
 /** Grey blocks shaped like the dashboard while the first data loads. */
 function ContentSkeleton() {
@@ -55,6 +56,7 @@ function MainContent() {
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
       {activeTab === 'dashboard' && <DashboardTab />}
       {activeTab === 'clients' && <ClientsTab />}
+      {activeTab === 'team' && <MyTeamTab />}
       {activeTab === 'performance' && <StaffPerformanceTab />}
       {activeTab === 'directory' && <StaffDirectoryTab />}
       {activeTab === 'revenue' && <RevenueEntriesTab />}

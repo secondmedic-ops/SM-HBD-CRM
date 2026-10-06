@@ -69,12 +69,12 @@ async function api(req: Request, env: Env, ctx: ExecutionContext): Promise<Respo
   const sql = connect(env);
   try {
     const user: User = off
-      ? { id: 'local-dev', email: null, role: 'ADMIN', staffId: null, staffName: null, dept: null, authMode: 'off' }
+      ? { id: 'local-dev', email: null, role: 'ADMIN', staffId: null, staffName: null, dept: null, inchargeId: null, authMode: 'off' }
       : { ...who, ...(await accessOf(sql, who.id, who.email)), authMode: 'supabase' };
     const { route, params } = found;
     if (route.path === '/api/v1/me') {
       return json({ userId: user.id, email: user.email, role: user.role, authMode: user.authMode,
-        staffId: user.staffId, staffName: user.staffName, dept: user.dept });
+        staffId: user.staffId, staffName: user.staffName, dept: user.dept, inchargeId: user.inchargeId });
     }
     if (route.access !== 'login' && (!user.role || !(route.access as readonly string[]).includes(user.role))) {
       return errorResponse(403, FORBIDDEN);

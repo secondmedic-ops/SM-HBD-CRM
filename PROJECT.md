@@ -20,10 +20,12 @@ on free plans.
 - Roles (worked out per login in `cloudflare/src/api/auth.ts`, cached 60 s):
   - **ADMIN**: `public.user_roles` row (first admin: the SQL START-HERE.bat prints). Everything, incl. Staff mapping.
   - **ACCOUNTS**: email in Staff mapping > Accounts team logins. Sees and edits all departments, all amounts; no Staff mapping.
-  - **INCHARGE**: email on a staff row with role Incharge. Their department's entries, outstanding and updates; may
-    delete entries of the department.
-  - **STAFF**: email on a staff row with role Team. Only their own entries and outstanding (never cost or profit),
-    their department's daily updates; cannot delete entries.
+  - **INCHARGE**: email on a staff row with role Incharge. Works with their **team** = themselves + the staff whose
+    `staff.incharge_id` points at them (entries, outstanding, clients, daily updates; may delete the team's entries).
+    My team tab: adds Team members to their own team, edits their name / designation / project / target / email and
+    makes their logins. Role, department and who reports to whom are set by ADMIN in Staff mapping (Reports to).
+  - **STAFF**: email on a staff row with role Team. Only their own entries, outstanding and clients (never cost or
+    profit), their team's daily updates; cannot delete entries.
   - A login whose email is in none of these has no role and sees nothing.
 - Logins: Staff mapping > Create login (ADMIN) makes the Supabase user or sets a new password. It needs the Worker
   secret `SUPABASE_SERVICE_ROLE_KEY`, set once with `STAFF-LOGINS-KEY.bat`.

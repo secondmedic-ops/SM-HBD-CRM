@@ -61,6 +61,8 @@ export interface ApiMe {
   staffId?: string;
   staffName?: string;
   dept?: string;
+  /** The incharge that staff row reports to. */
+  inchargeId?: string;
 }
 
 export interface RevenueInput {
@@ -126,6 +128,8 @@ export interface StaffInput {
   individualTarget?: number;
   /** Work email of the person's login ('' removes the link). */
   email?: string;
+  /** Admin: the incharge a team member reports to ('' = nobody). */
+  inchargeId?: string;
 }
 
 export interface AccountsLogin {

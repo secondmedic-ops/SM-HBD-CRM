@@ -17,8 +17,11 @@ export interface Staff {
   individualTarget: number;
   /** Work email of the person's login (only sent to Admin). */
   email?: string;
-  /** Admin only: a login exists for that email. */
+  /** Admin, and an incharge for their team: a login exists for that email. */
   hasLogin?: boolean;
+  /** The incharge this person reports to (team members only). */
+  inchargeId?: string;
+  inchargeName?: string;
 }
 
 export type PaymentStatus = 'Paid' | 'Partly paid' | 'Outstanding';

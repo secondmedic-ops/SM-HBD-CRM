@@ -7,7 +7,7 @@ import { shrinkImage } from '../lib/image';
 import { Image } from 'lucide-react';
 
 export const OutstandingTab: React.FC = () => {
-  const { outstandingPayments, markOutstandingReceived, addOutstanding, staffList, role, currentStaffId, loadImage } = useApp();
+  const { outstandingPayments, markOutstandingReceived, addOutstanding, staffList, role, currentStaffId, loadImage, inTeam } = useApp();
 
   const [client, setClient] = useState('');
   const [amount, setAmount] = useState('');
@@ -72,10 +72,7 @@ export const OutstandingTab: React.FC = () => {
 
   const effectiveOutstanding = outstandingPayments.filter(o => {
     if (role === 'Staff' && o.staffId !== currentStaffId) return false;
-    if (role === 'Incharge') {
-      const inchargeStaff = staffList.find(s => s.id === currentStaffId);
-      if (inchargeStaff && o.dept !== inchargeStaff.dept) return false;
-    }
+    if (role === 'Incharge' && !inTeam(o.staffId)) return false;
     return true;
   });
 

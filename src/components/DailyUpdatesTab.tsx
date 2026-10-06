@@ -31,9 +31,12 @@ export const DailyUpdatesTab: React.FC = () => {
     : staffList.find(s => s.id === currentStaffId);
   const [saving, setSaving] = useState(false);
 
-  // The team in view: everyone for admin / accounts, otherwise the login's own department.
-  const viewDept = role === 'Admin' || role === 'Accounts team' ? null : staffList.find(s => s.id === currentStaffId)?.dept ?? me.dept ?? null;
-  const team = viewDept ? staffList.filter(s => s.dept === viewDept) : staffList;
+  // The team in view: everyone for admin / accounts; an incharge and their team; a team member and their incharge's team.
+  const allView = role === 'Admin' || role === 'Accounts team';
+  const viewer = staffList.find(s => s.id === currentStaffId);
+  const lead = role === 'Incharge' ? currentStaffId : viewer?.inchargeId;
+  const team = allView ? staffList : lead ? staffList.filter(s => s.id === lead || s.inchargeId === lead) : viewer ? [viewer] : [];
+  const viewDept = allView ? null : lead ? `${staffList.find(s => s.id === lead)?.name ?? ''}'s team` : 'Just me'
 
   const handleSubmitUpdate = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -25,8 +25,13 @@ Built on the sb-spring-cf-stack skill; SM ERP (`secondmedic-ops/SM-ERP`) is the 
   contract), frontend calls vs contract + typecheck + build, migrations, Hyperdrive, one `wrangler deploy`, smoke, record.
 - **Every endpoint is one line in `cloudflare/src/api/routes.ts` with its roles.** Only health/version are public;
   `'login'` only for `/api/v1/me`. Add API checks for new endpoints in `cloudflare/test/api.itest.mjs`.
-- **Scope lives in the API, not the screens**: `services/scope.ts` (ADMIN / ACCOUNTS all; INCHARGE own department;
-  STAFF own rows, daily updates own department). STAFF JSON never carries `cost`; STAFF edits keep the saved cost.
+- **Scope lives in the API, not the screens**: `services/scope.ts` (ADMIN / ACCOUNTS all; INCHARGE their team =
+  themselves + staff with `incharge_id` = them; STAFF own rows and own clients, daily updates their team). STAFF JSON
+  never carries `cost`; STAFF edits keep the saved cost. Screens filter the incharge view with `inTeam()` from the context.
+- **Clients** (`services/clients.ts`, `src/components/ClientsTab.tsx`): each client has an owner (staff); same scope;
+  a client outside scope answers 404. Visits in `client_visits`. Revenue entries may carry `client_id`.
+- **Team structure**: ADMIN sets Reports to in Staff mapping; INCHARGE adds / edits / removes their own Team members and
+  their logins in My team (`src/components/MyTeamTab.tsx`); never role, department or incharge.
 - **Revenue and outstanding stay in step** (`domain/payments.ts`, unit-tested in `test/payments.test.ts`): an entry not
   fully paid gets one outstanding row (amount = entry amount - received up front); a payment on that row raises both
   `amount_paid` and the entry's `amount_received`; editing an entry keeps payments already collected. Status is

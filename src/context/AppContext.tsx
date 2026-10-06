@@ -43,6 +43,8 @@ interface AppContextType {
   setRole: (role: Role) => void;
   /** The staff member the view is for (the login's own row; an Admin previewing may pick one). */
   currentStaffId: string;
+  /** Incharge view: is this person the incharge or in their team? (Other views: true.) */
+  inTeam: (staffId: string) => boolean;
   setCurrentStaffId: (id: string) => void;
   loading: boolean;
   notice: Notice | null;
@@ -180,13 +182,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setRole = (newRole: Role) => {
     if (!canSwitchRole) return;
     setRoleState(newRole);
-    if (newRole !== 'Admin' && activeTab === 'mapping') setActiveTab('dashboard');
+    if ((newRole !== 'Admin' && activeTab === 'mapping') || (newRole !== 'Incharge' && activeTab === 'team')) setActiveTab('dashboard');
     // Previewing a staff / incharge view needs a person: start with the first one.
-    if ((newRole === 'Staff' || newRole === 'Incharge') && !currentStaffId && staffList[0]) setCurrentStaffIdState(staffList[0].id);
+    if (newRole === 'Incharge' && !staffList.some(s => s.id === currentStaffId && s.role === 'Incharge')) {
+      const firstIncharge = staffList.find(s => s.role === 'Incharge');
+      if (firstIncharge) setCurrentStaffIdState(firstIncharge.id);
+    } else if (newRole === 'Staff' && !currentStaffId && staffList[0]) setCurrentStaffIdState(staffList[0].id);
   };
 
   const setCurrentStaffId = (id: string) => {
     if (canSwitchRole) setCurrentStaffIdState(id);
+  };
+
+  // The incharge view works with a team: the incharge and the staff reporting to them.
+  const inTeam = (staffId: string) => {
+    if (role !== 'Incharge') return true;
+    if (staffId === currentStaffId) return true;
+    return staffList.find(s => s.id === staffId)?.inchargeId === currentStaffId;
   };
 
   const setFilters = (newFilters: Partial<FilterState>) => setFiltersState(prev => ({ ...prev, ...newFilters }));
@@ -211,6 +223,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const saved = await api.updateStaff(id, p.patch);
       setStaffList(prev => prev.map(s => (s.id === id ? saved : s)));
+      // A role change can move a whole team (an incharge who becomes Team leaves their team unassigned).
+      if (p.patch.role !== undefined) await loadStaff();
     } catch (e) {
       fail(e);
       await loadStaff().catch(() => {});
@@ -222,7 +236,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cur = pending.current.get(id);
     if (cur) window.clearTimeout(cur.timer);
     const patch: StaffInput = { ...(cur?.patch ?? {}) };
-    for (const k of ['name', 'dept', 'role', 'designation', 'project', 'individualTarget', 'email'] as const) {
+    for (const k of ['name', 'dept', 'role', 'designation', 'project', 'individualTarget', 'email', 'inchargeId'] as const) {
       if (fields[k] !== undefined) (patch as any)[k] = fields[k];
     }
     // A name being retyped is not sent while the box is empty.
@@ -296,6 +310,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRole,
         currentStaffId,
         setCurrentStaffId,
+        inTeam,
         loading,
         notice,
         clearNotice: () => setNotice(null),

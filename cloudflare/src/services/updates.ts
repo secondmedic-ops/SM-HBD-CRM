@@ -1,10 +1,10 @@
 // Daily updates: what each person did today and how many clients they met. ADMIN / ACCOUNTS see everyone; INCHARGE
-// and STAFF see their own department (the team's "today's filling status"). STAFF and INCHARGE write only their own.
+// and STAFF see their own team (the team's "today's filling status"). STAFF and INCHARGE write only their own.
 import type { Ctx } from '../api/context';
 import { Check, date, int, obj, queryDate, str } from '../api/validate';
 import { addDays, todayIst } from '../domain/dates';
 import { audit } from './audit';
-import { assertMayActFor, deptScope, loadStaff, seesAll } from './scope';
+import { assertMayActFor, loadStaff, seesAll, teamScope } from './scope';
 import { forbidden } from '../domain/errors';
 
 const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v === null || v === undefined ? null : String(v));
@@ -17,7 +17,7 @@ export async function listUpdates(c: Ctx) {
   const rows = await sql`
     select u.id::text, u.update_date, u.staff_id::text, s.name as staff_name, u.dept, u.update_text, u.clients_met, u.created_at
     from public.daily_updates u join public.staff s on s.id = u.staff_id
-    where true ${deptScope(c, 'u')}
+    where true ${teamScope(c, 'u')}
       ${from ? sql`and u.update_date >= ${from}` : sql``} ${to ? sql`and u.update_date <= ${to}` : sql``}
     order by u.update_date desc, u.created_at desc`;
   return rows.map((r) => ({

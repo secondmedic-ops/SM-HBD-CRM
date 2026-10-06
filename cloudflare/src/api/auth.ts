@@ -4,6 +4,7 @@
 //   1. public.user_roles row for the login (ADMIN, or any role set by hand)       -> that role
 //   2. the login's email is in Staff mapping > Accounts team logins             -> ACCOUNTS
 //   3. the login's email is on an active staff row (Staff mapping)              -> INCHARGE (Incharge) or STAFF (Team)
+// An INCHARGE works with their team: the staff whose staff.incharge_id points at them.
 // A login with none of these has no role and sees nothing but /api/v1/me.
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { Db } from '../db';
@@ -18,8 +19,10 @@ export interface Access {
   /** The staff row linked to this login by email (null for admins / accounts without one). */
   staffId: string | null;
   staffName: string | null;
-  /** Department of that staff row: an INCHARGE sees this whole department. */
+  /** Department of that staff row. */
   dept: string | null;
+  /** The incharge that staff row reports to (a team member sees their team's daily updates). */
+  inchargeId: string | null;
 }
 
 export interface User extends Access {
@@ -75,12 +78,12 @@ export async function accessOf(db: Db, userId: string, email: string | null): Pr
   const now = Date.now();
   const c = accessCache.get(userId);
   if (c && now - c.at < CACHE_MS) return c;
-  if (!/^[0-9a-fA-F-]{36}$/.test(userId)) return { role: null, staffId: null, staffName: null, dept: null };
+  if (!/^[0-9a-fA-F-]{36}$/.test(userId)) return { role: null, staffId: null, staffName: null, dept: null, inchargeId: null };
   const mail = (email || '').trim().toLowerCase();
   const [row] = await db`
     select (select r.role from public.user_roles r where r.user_id = ${userId}::uuid) as role,
            exists (select 1 from public.accounts_logins a where a.email = ${mail}) as accounts,
-           s.id::text as staff_id, s.name as staff_name, s.dept, s.role as staff_role
+           s.id::text as staff_id, s.name as staff_name, s.dept, s.role as staff_role, s.incharge_id::text as incharge_id
     from (select 1) one
     left join public.staff s on ${mail} <> '' and lower(s.email) = ${mail} and s.active`;
   const set = row?.role && (ROLES as readonly string[]).includes(String(row.role)) ? (String(row.role) as Role) : null;
@@ -90,6 +93,7 @@ export async function accessOf(db: Db, userId: string, email: string | null): Pr
     staffId: row?.staff_id ?? null,
     staffName: row?.staff_name ?? null,
     dept: row?.dept ?? null,
+    inchargeId: row?.incharge_id ?? null,
     at: now,
   };
   accessCache.set(userId, hit);

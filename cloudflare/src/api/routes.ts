@@ -38,10 +38,10 @@ export const ROUTES: Route[] = [
   { method: 'GET', path: '/api/v1/departments', access: ALL, summary: 'Departments with monthly targets', handler: listDepartments },
   { method: 'PUT', path: '/api/v1/departments/{name}', access: ADMIN, summary: 'Set a department target ({target})', handler: setDepartmentTarget },
 
-  { method: 'GET', path: '/api/v1/staff', access: ALL, summary: 'Active staff (email and login status only for ADMIN)', handler: listStaff },
-  { method: 'POST', path: '/api/v1/staff', access: ADMIN, status: 201, summary: 'Add a staff member', handler: createStaff },
-  { method: 'PUT', path: '/api/v1/staff/{id}', access: ADMIN, summary: 'Change a staff member (only the fields sent)', handler: updateStaff },
-  { method: 'DELETE', path: '/api/v1/staff/{id}', access: ADMIN, status: 204, summary: 'Remove a staff member (past entries stay)', handler: deleteStaff },
+  { method: 'GET', path: '/api/v1/staff', access: ALL, summary: 'Active staff with their incharge (email and login status: ADMIN, INCHARGE for own team)', handler: listStaff },
+  { method: 'POST', path: '/api/v1/staff', access: ['ADMIN', 'INCHARGE'], status: 201, summary: 'Add a staff member (INCHARGE: a Team member of their own team)', handler: createStaff },
+  { method: 'PUT', path: '/api/v1/staff/{id}', access: ['ADMIN', 'INCHARGE'], summary: 'Change a staff member (only the fields sent; INCHARGE: own team, no role / dept / incharge)', handler: updateStaff },
+  { method: 'DELETE', path: '/api/v1/staff/{id}', access: ['ADMIN', 'INCHARGE'], status: 204, summary: 'Remove a staff member (past entries stay; INCHARGE: own team)', handler: deleteStaff },
 
   { method: 'GET', path: '/api/v1/revenue', access: ALL, summary: 'Revenue entries in scope (?from&to); no cost for STAFF', handler: listRevenue },
   { method: 'POST', path: '/api/v1/revenue', access: ALL, status: 201, summary: 'New revenue entry (+ outstanding row when not fully paid)', handler: createRevenue },
@@ -70,7 +70,7 @@ export const ROUTES: Route[] = [
   { method: 'GET', path: '/api/v1/admin/accounts-logins', access: ADMIN, summary: 'Accounts team emails', handler: listAccountsLogins },
   { method: 'POST', path: '/api/v1/admin/accounts-logins', access: ADMIN, status: 201, summary: 'Add an accounts team email', handler: addAccountsLogin },
   { method: 'DELETE', path: '/api/v1/admin/accounts-logins/{email}', access: ADMIN, status: 204, summary: 'Remove an accounts team email', handler: removeAccountsLogin },
-  { method: 'POST', path: '/api/v1/admin/logins', access: ADMIN, summary: 'Create a login or set its password ({email, password})', handler: setLogin },
+  { method: 'POST', path: '/api/v1/admin/logins', access: ['ADMIN', 'INCHARGE'], summary: 'Create a login or set its password ({email, password}; INCHARGE: own team)', handler: setLogin },
 ];
 
 const compiled = ROUTES.map((r) => {

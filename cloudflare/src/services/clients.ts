@@ -1,7 +1,7 @@
 // Clients and their visits. Each client has an owner (a staff member); who may see and manage it:
-//   ADMIN / ACCOUNTS: every client;  INCHARGE: clients of their department;  STAFF: only clients they own.
+//   ADMIN / ACCOUNTS: every client;  INCHARGE: clients of their team;  STAFF: only clients they own.
 // A client outside the caller's scope answers 404, as if it did not exist. Everyone who sees a client may change it and
-// log / change / delete its visits; only ADMIN / ACCOUNTS / INCHARGE (own department) can hand a client to someone else.
+// log / change / delete its visits; only ADMIN / ACCOUNTS / INCHARGE (own team) can hand a client to someone else.
 // Audit rows carry status / type / department only, never names, phones, emails, addresses or visit notes.
 import type { Ctx } from '../api/context';
 import { Check, date, EMAIL_RE, obj, oneOf, queryDate, str, uuidParam } from '../api/validate';
@@ -9,7 +9,7 @@ import type { Db } from '../db';
 import { addDays, todayIst } from '../domain/dates';
 import { ApiError, forbidden, notFound } from '../domain/errors';
 import { audit } from './audit';
-import { assertMayActFor, loadStaff, rowScope, seesAll } from './scope';
+import { assertMayActFor, inMyScope, loadStaff, rowScope, seesAll } from './scope';
 
 export const CLIENT_TYPES = ['Individual', 'Corporate'] as const;
 export const CLIENT_STATUSES = ['Lead', 'Active', 'Inactive'] as const;
@@ -32,23 +32,23 @@ export interface ClientRow {
   id: string;
   name: string;
   staff_id: string;
+  /** The incharge the owner reports to. */
+  owner_incharge: string | null;
   dept: string;
   status: string;
   type: string;
 }
 
 /** May this login see the client? (Same rule as rowScope, for a row already loaded.) */
-function sees(c: Ctx, r: { staff_id: string; dept: string }): boolean {
-  if (seesAll(c)) return true;
-  if (c.user.role === 'INCHARGE') return !!c.user.dept && r.dept === c.user.dept;
-  return !!c.user.staffId && r.staff_id === c.user.staffId;
-}
+const sees = (c: Ctx, r: ClientRow) => inMyScope(c, { id: r.staff_id, incharge_id: r.owner_incharge });
 
 /** A client the caller may see (optionally locked for update), else 404. */
 export async function visibleClient(db: Db, c: Ctx, id: string, lock = false): Promise<ClientRow> {
   const rows = lock
-    ? await db`select id::text, name, staff_id::text, dept, status, type from public.clients where id = ${id}::uuid for update`
-    : await db`select id::text, name, staff_id::text, dept, status, type from public.clients where id = ${id}::uuid`;
+    ? await db`select cl.id::text, cl.name, cl.staff_id::text, s.incharge_id::text as owner_incharge, cl.dept, cl.status, cl.type
+               from public.clients cl join public.staff s on s.id = cl.staff_id where cl.id = ${id}::uuid for update of cl`
+    : await db`select cl.id::text, cl.name, cl.staff_id::text, s.incharge_id::text as owner_incharge, cl.dept, cl.status, cl.type
+               from public.clients cl join public.staff s on s.id = cl.staff_id where cl.id = ${id}::uuid`;
   const r = rows[0] as unknown as ClientRow | undefined;
   if (!r || !sees(c, r)) throw notFound('Client', id);
   return r;

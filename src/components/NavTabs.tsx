@@ -23,6 +23,11 @@ export const NavTabs: React.FC = () => {
     { id: 'outstanding', label: 'Outstanding', icon: CreditCard },
   ];
 
+  // An incharge manages their own team here (add staff, details, logins).
+  if (role === 'Incharge') {
+    tabs.push({ id: 'team', label: 'My team' });
+  }
+
   // Staff mapping changes staff, targets and logins: Admin only (the API refuses it for everyone else).
   if (role === 'Admin') {
     tabs.push({ id: 'mapping', label: 'Staff mapping', icon: UserCog });

@@ -15,13 +15,13 @@ import {
 } from 'recharts';
 
 export const StaffPerformanceTab: React.FC = () => {
-  const { staffList, revenueEntries, outstandingPayments, role, currentStaffId } = useApp();
+  const { staffList, revenueEntries, outstandingPayments, role, currentStaffId, inTeam } = useApp();
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
 
   const effectiveStaff = role === 'Staff'
     ? staffList.filter(s => s.id === currentStaffId)
     : role === 'Incharge'
-    ? staffList.filter(s => s.dept === staffList.find(st => st.id === currentStaffId)?.dept)
+    ? staffList.filter(s => inTeam(s.id))
     : staffList;
 
   const staffMetrics = effectiveStaff.map(stf => {

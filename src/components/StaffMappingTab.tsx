@@ -29,6 +29,9 @@ export const StaffMappingTab: React.FC = () => {
   const [newDesignation, setNewDesignation] = useState('');
   const [newProject, setNewProject] = useState('');
   const [newTarget, setNewTarget] = useState('150000');
+  const [newIncharge, setNewIncharge] = useState('');
+  // Incharges a team member can report to.
+  const incharges = staffList.filter(s => s.role === 'Incharge');
 
   const [newEmail, setNewEmail] = useState('');
 
@@ -83,6 +86,7 @@ export const StaffMappingTab: React.FC = () => {
       designation: newDesignation,
       project: newProject,
       individualTarget: Number(newTarget) || 150000,
+      inchargeId: newRole === 'Team' && newIncharge ? newIncharge : undefined,
     });
     if (!ok) return;
 
@@ -151,7 +155,7 @@ export const StaffMappingTab: React.FC = () => {
         <h3 className="text-base font-bold text-slate-900 mb-1">Department-wise logins</h3>
         <p className="text-xs text-slate-500 mb-6">
           Put each person's work email on their row once: when they sign in with it they open the CRM straight into their
-          own view and fill data daily. An Incharge also sees the whole department. Then set a password with Create login
+          own view and fill data daily. An Incharge also sees the staff who report to them. Then set a password with Create login
           and share it with them.
         </p>
 
@@ -208,6 +212,7 @@ export const StaffMappingTab: React.FC = () => {
                 <th className="py-3 px-4">Name</th>
                 <th className="py-3 px-4">Department</th>
                 <th className="py-3 px-4">Role</th>
+                <th className="py-3 px-4">Reports to</th>
                 <th className="py-3 px-4">Designation</th>
                 <th className="py-3 px-4">Project</th>
                 <th className="py-3 px-4">Monthly Target ₹</th>
@@ -247,6 +252,22 @@ export const StaffMappingTab: React.FC = () => {
                       <option value="Team">Team</option>
                       <option value="Incharge">Incharge</option>
                     </select>
+                  </td>
+                  <td className="py-3 px-4">
+                    {stf.role === 'Team' ? (
+                      <select
+                        value={stf.inchargeId ?? ''}
+                        onChange={e => updateStaff(stf.id, { inchargeId: e.target.value })}
+                        className="bg-slate-50 border border-slate-200 px-2 py-1 w-full focus:outline-none"
+                      >
+                        <option value="">Nobody</option>
+                        {incharges.map(i => (
+                          <option key={i.id} value={i.id}>{i.name} ({i.dept})</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
                   </td>
                   <td className="py-3 px-4">
                     <input
@@ -290,7 +311,7 @@ export const StaffMappingTab: React.FC = () => {
         </div>
 
         {/* Add Staff Inline Form */}
-        <form onSubmit={handleAddStaffSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 pt-4 border-t border-slate-200">
+        <form onSubmit={handleAddStaffSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 pt-4 border-t border-slate-200">
           <div>
             <label className="block text-[11px] font-semibold text-slate-500 mb-1">Name</label>
             <input
@@ -324,6 +345,24 @@ export const StaffMappingTab: React.FC = () => {
             >
               <option value="Team">Team</option>
               <option value="Incharge">Incharge</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">Reports to</label>
+            <select
+              value={newIncharge}
+              disabled={newRole !== 'Team'}
+              onChange={e => {
+                setNewIncharge(e.target.value);
+                const i = incharges.find(x => x.id === e.target.value);
+                if (i) setNewDept(i.dept);
+              }}
+              className="w-full bg-slate-50 border border-slate-200 px-3 py-2 text-xs focus:outline-none disabled:opacity-50"
+            >
+              <option value="">Nobody</option>
+              {incharges.map(i => (
+                <option key={i.id} value={i.id}>{i.name} ({i.dept})</option>
+              ))}
             </select>
           </div>
           <div>

@@ -43,8 +43,8 @@ export const ClientsTab: React.FC = () => {
 
   const today = getTodayString();
   const canPickOwner = me.role !== 'STAFF';
-  // Owners an incharge may choose: their own department; admin / accounts: everyone.
-  const ownerChoices = me.role === 'INCHARGE' ? staffList.filter(s => s.dept === me.dept) : staffList;
+  // Owners an incharge may choose: themselves and their team; admin / accounts: everyone.
+  const ownerChoices = me.role === 'INCHARGE' ? staffList.filter(s => s.id === me.staffId || s.inchargeId === me.staffId) : staffList;
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();

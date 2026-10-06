@@ -24,14 +24,12 @@ export const DashboardTab: React.FC = () => {
     selectedMonth,
     role,
     currentStaffId,
+    inTeam,
   } = useApp();
 
   const effectiveRevenue = revenueEntries.filter(r => {
     if (role === 'Staff' && r.staffId !== currentStaffId) return false;
-    if (role === 'Incharge') {
-      const inchargeStaff = staffList.find(s => s.id === currentStaffId);
-      if (inchargeStaff && r.dept !== inchargeStaff.dept) return false;
-    }
+    if (role === 'Incharge' && !inTeam(r.staffId)) return false;
     if (filters.dept && filters.dept !== 'ALL' && r.dept !== filters.dept) return false;
     if (filters.staffId && filters.staffId !== 'ALL' && r.staffId !== filters.staffId) return false;
     if (filters.fromDate && r.date < filters.fromDate) return false;
@@ -64,10 +62,7 @@ export const DashboardTab: React.FC = () => {
     .filter(o => o.status === 'Pending')
     .filter(o => {
       if (role === 'Staff' && o.staffId !== currentStaffId) return false;
-      if (role === 'Incharge') {
-        const inchargeStaff = staffList.find(s => s.id === currentStaffId);
-        if (inchargeStaff && o.dept !== inchargeStaff.dept) return false;
-      }
+      if (role === 'Incharge' && !inTeam(o.staffId)) return false;
       if (filters.dept && filters.dept !== 'ALL' && o.dept !== filters.dept) return false;
       if (filters.staffId && filters.staffId !== 'ALL' && o.staffId !== filters.staffId) return false;
       return true;
@@ -108,7 +103,7 @@ export const DashboardTab: React.FC = () => {
   const effectiveStaff = role === 'Staff'
     ? staffList.filter(s => s.id === currentStaffId)
     : role === 'Incharge'
-    ? staffList.filter(s => s.dept === staffList.find(st => st.id === currentStaffId)?.dept)
+    ? staffList.filter(s => inTeam(s.id))
     : filters.dept && filters.dept !== 'ALL'
     ? staffList.filter(s => s.dept === filters.dept)
     : staffList;

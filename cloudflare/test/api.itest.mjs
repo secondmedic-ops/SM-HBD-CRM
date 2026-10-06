@@ -101,6 +101,38 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('remove staff: 204', (await call('admin', 'DELETE', `/api/v1/staff/${vandana.id}`)).status, 204);
   check('removed staff left the list', !byName((await call('admin', 'GET', '/api/v1/staff')).body, 'Vandana'));
 
+  // ---- Reporting line: incharges and their teams -------------------------------------------------------------------
+  const staffA = (await call('admin', 'GET', '/api/v1/staff')).body;
+  eq('migration: team members report to their department\'s only incharge',
+    ['Supriya', 'Sakshi', 'Mansi', 'Nihal'].map((x) => byName(staffA, x)?.inchargeName ?? null), ['Manoj', 'Manoj', 'Ranju', null]);
+  const asInch = (await call('incharge', 'GET', '/api/v1/staff')).body;
+  check('incharge sees emails of own team only', byName(asInch, 'Supriya')?.email === email('staff') && !('email' in byName(asInch, 'Nihal')),
+    JSON.stringify([byName(asInch, 'Supriya'), byName(asInch, 'Nihal')]));
+  const asha = await call('incharge', 'POST', '/api/v1/staff', { name: 'Asha', role: 'Incharge', dept: 'BD', inchargeId: nihal.id,
+    designation: 'BDE', project: 'AIROLI Lab', individualTarget: 120000, email: 'asha@rehearsal.test' });
+  eq('incharge adds a team member to own team', [asha.status, asha.body?.role, asha.body?.dept, asha.body?.inchargeId, asha.body?.email],
+    [201, 'Team', 'AIROLI', manoj.id, 'asha@rehearsal.test']);
+  eq('team member cannot add staff', (await call('staff', 'POST', '/api/v1/staff', { name: 'X', dept: 'AIROLI' })).status, 403);
+  eq('incharge changes a team member\'s details', (await call('incharge', 'PUT', `/api/v1/staff/${asha.body.id}`, { designation: 'Sr. BDE' })).body?.designation, 'Sr. BDE');
+  eq('incharge cannot change role / incharge', (await call('incharge', 'PUT', `/api/v1/staff/${asha.body.id}`, { role: 'Incharge' })).status, 403);
+  eq('incharge cannot change someone outside the team', (await call('incharge', 'PUT', `/api/v1/staff/${nihal.id}`, { designation: 'x' })).status, 404);
+  eq('incharge cannot change own row', (await call('incharge', 'PUT', `/api/v1/staff/${manoj.id}`, { individualTarget: 1 })).status, 403);
+  eq('incharge makes the team member\'s login', (await call('incharge', 'POST', '/api/v1/admin/logins', { email: 'asha@rehearsal.test', password: 'longenough' })).body, { email: 'asha@rehearsal.test', created: true });
+  eq('incharge cannot reset logins outside the team', (await call('incharge', 'POST', '/api/v1/admin/logins', { email: email('other'), password: 'longenough' })).status, 400);
+  eq('incharge cannot remove someone outside the team', (await call('incharge', 'DELETE', `/api/v1/staff/${nihal.id}`)).status, 404);
+  eq('incharge removes a team member', (await call('incharge', 'DELETE', `/api/v1/staff/${asha.body.id}`)).status, 204);
+  const kiran = await call('admin', 'POST', '/api/v1/staff', { name: 'Kiran', dept: 'MDSA', role: 'Incharge', designation: 'BDM' });
+  eq('admin adds an incharge', [kiran.status, kiran.body?.inchargeId ?? null], [201, null]);
+  eq('admin assigns a team member to an incharge', (await call('admin', 'PUT', `/api/v1/staff/${nihal.id}`, { inchargeId: kiran.body.id })).body?.inchargeName, 'Kiran');
+  eq('incharge must be an incharge', (await call('admin', 'PUT', `/api/v1/staff/${nihal.id}`, { inchargeId: supriya.id })).body?.fieldErrors, { inchargeId: 'is not an incharge' });
+  const newT = await call('admin', 'POST', '/api/v1/staff', { name: 'Ravi K', role: 'Team', inchargeId: kiran.body.id });
+  eq('team member takes the incharge\'s department', [newT.status, newT.body?.dept, newT.body?.inchargeName], [201, 'MDSA', 'Kiran']);
+  await call('admin', 'PUT', `/api/v1/staff/${kiran.body.id}`, { role: 'Team' });
+  const afterDemote = (await call('admin', 'GET', '/api/v1/staff')).body;
+  eq('demoted incharge leaves the team unassigned', [byName(afterDemote, 'Nihal')?.inchargeId ?? null, byName(afterDemote, 'Ravi K')?.inchargeId ?? null], [null, null]);
+  await call('admin', 'DELETE', `/api/v1/staff/${kiran.body.id}`);
+  await call('admin', 'DELETE', `/api/v1/staff/${newT.body.id}`);
+
   // ---- Revenue entries ------------------------------------------------------------------------------------------
   const D = todayIst(-2);
   const e1 = await call('staff', 'POST', '/api/v1/revenue', { date: D, staffId: sakshi.id, client: 'Apollo Clinic', type: 'Individual',
@@ -123,7 +155,7 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   const listS = (await call('staff', 'GET', '/api/v1/revenue')).body;
   eq('staff sees only own entries', listS.map((r) => r.client), ['Apollo Clinic']);
   const listI = (await call('incharge', 'GET', '/api/v1/revenue')).body;
-  eq('incharge sees the department', listI.map((r) => r.client).sort(), ['Apollo Clinic', 'Fortis Vashi']);
+  eq('incharge sees the team', listI.map((r) => r.client).sort(), ['Apollo Clinic', 'Fortis Vashi']);
   eq('other department sees none of AIROLI', (await call('other', 'GET', '/api/v1/revenue')).body.map((r) => r.client), ['Ranchi Hospital']);
   eq('accounts sees all', (await call('accounts', 'GET', '/api/v1/revenue')).body.length, 3);
   eq('date filter', (await call('admin', 'GET', `/api/v1/revenue?from=${todayIst(-1)}`)).body.length, 0);

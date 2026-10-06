@@ -11,7 +11,7 @@ import { d0, money } from '../domain/money';
 import { outstandingFor, PAYMENT_STATUSES, receive, receivedFor, statusOf } from '../domain/payments';
 import { audit } from './audit';
 import { checkImage, deleteImages, saveImage } from './attachments';
-import { assertMayActFor, loadStaff, ownStaffId, rowScope } from './scope';
+import { assertMayActFor, loadStaff, ownStaffId, rowScope, staffOfRow } from './scope';
 import { visibleClient } from './clients';
 
 const TYPES = ['Individual', 'Corporate'] as const;
@@ -202,7 +202,7 @@ export async function updateRevenue(c: Ctx, body: unknown) {
       where r.id = ${id}::uuid for update of r`;
     if (!old) throw notFound('Revenue entry', id);
     // The entry as it is now must be the caller's too (a STAFF cannot take over someone else's entry).
-    assertMayActFor(c, { id: old.staff_id, dept: old.dept, name: '' });
+    assertMayActFor(c, await staffOfRow(tx, old.staff_id));
     const received = receivedFor(e.status, e.amount, e.amountReceived);
     const cost = c.user.role === 'STAFF' || e.cost === null ? new Big(old.cost) : e.cost;
     const prev = old.out_id ? { id: old.out_id, amount: d0(old.out_amount), paid: d0(old.out_paid) } : null;
@@ -234,7 +234,7 @@ export async function deleteRevenue(c: Ctx) {
       from public.revenue_entries r left join public.outstanding_payments o on o.revenue_entry_id = r.id
       where r.id = ${id}::uuid for update of r`;
     if (!old) throw notFound('Revenue entry', id);
-    assertMayActFor(c, { id: old.staff_id, dept: old.dept, name: '' });
+    assertMayActFor(c, await staffOfRow(tx, old.staff_id));
     await tx`delete from public.revenue_entries where id = ${id}::uuid`; // its outstanding row goes with it (cascade)
     await deleteImages(tx, [old.slip_id, old.shot_id]);
     await audit(tx, c.user.id, 'DELETE', 'revenue_entries', id,
@@ -292,7 +292,7 @@ export async function receiveOutstanding(c: Ctx, body: unknown) {
     const [o] = await tx`select staff_id::text, dept, amount::text, amount_paid::text, revenue_entry_id::text
                          from public.outstanding_payments where id = ${id}::uuid for update`;
     if (!o) throw notFound('Outstanding payment', id);
-    assertMayActFor(c, { id: o.staff_id, dept: o.dept, name: '' });
+    assertMayActFor(c, await staffOfRow(tx, o.staff_id));
     const pay = money(x!);
     const paid = receive({ amount: d0(o.amount), paid: d0(o.amount_paid) }, pay);
     await tx`update public.outstanding_payments set amount_paid = ${paid.toFixed(2)}, updated_at = now() where id = ${id}::uuid`;
