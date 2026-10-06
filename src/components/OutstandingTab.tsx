@@ -3,61 +3,69 @@ import { useApp } from '../context/AppContext';
 import { formatINR, formatDate, getTodayString } from '../utils/formatters';
 import { OutstandingPayment } from '../types';
 import { ImageViewerModal } from './ImageViewerModal';
+import { shrinkImage } from '../lib/image';
 import { Image } from 'lucide-react';
 
 export const OutstandingTab: React.FC = () => {
-  const { outstandingPayments, markOutstandingReceived, addOutstanding, staffList, role, currentStaffId } = useApp();
+  const { outstandingPayments, markOutstandingReceived, addOutstanding, staffList, role, currentStaffId, loadImage } = useApp();
 
   const [client, setClient] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState(getTodayString());
-  const [staffId, setStaffId] = useState(role === 'Staff' ? currentStaffId : staffList[0]?.id || '');
+  const [staffId, setStaffId] = useState(currentStaffId || staffList[0]?.id || '');
+  const [saving, setSaving] = useState(false);
+  const [imageError, setImageError] = useState('');
   const [screenshot, setScreenshot] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [receivingItem, setReceivingItem] = useState<OutstandingPayment | null>(null);
   const [receiveAmount, setReceiveAmount] = useState('');
 
-  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setScreenshot(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    try {
+      setScreenshot(await shrinkImage(file));
+      setImageError('');
+    } catch (err: any) {
+      setImageError(err?.message || 'This image could not be read.');
     }
   };
 
-  const handleAddOutstanding = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!client.trim() || !amount || isNaN(Number(amount))) return;
+  const openImage = async (id?: string) => {
+    if (!id) return;
+    const url = await loadImage(id);
+    if (url) setPreviewImage(url);
+  };
 
-    const stf = staffList.find(s => s.id === staffId);
+  const handleAddOutstanding = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!client.trim() || !amount || isNaN(Number(amount)) || saving) return;
+    const stf = staffList.find(s => s.id === staffId) || staffList[0];
     if (!stf) return;
 
-    addOutstanding({
+    setSaving(true);
+    const ok = await addOutstanding({
       client,
       staffId: stf.id,
-      staffName: stf.name,
-      dept: stf.dept,
       amount: Number(amount),
-      amountPaid: 0,
       dueDate,
       screenshot: screenshot || undefined,
     });
+    setSaving(false);
+    if (!ok) return;
 
     setClient('');
     setAmount('');
     setScreenshot('');
   };
 
-  const handleConfirmReceive = (e: React.FormEvent) => {
+  const handleConfirmReceive = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!receivingItem || !receiveAmount || isNaN(Number(receiveAmount))) return;
 
     const numPaid = Number(receiveAmount);
-    markOutstandingReceived(receivingItem.id, numPaid);
+    if (!(await markOutstandingReceived(receivingItem.id, numPaid))) return;
     setReceivingItem(null);
     setReceiveAmount('');
   };
@@ -141,11 +149,13 @@ export const OutstandingTab: React.FC = () => {
               />
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-semibold text-white bg-[#1b7a54] rounded-xl hover:bg-[#156344] transition-all shrink-0 shadow-sm"
+                disabled={saving}
+                className="px-4 py-2 text-xs font-semibold text-white bg-[#1b7a54] rounded-xl hover:bg-[#156344] transition-all shrink-0 shadow-sm disabled:opacity-50"
               >
-                Submit
+                {saving ? 'Saving...' : 'Submit'}
               </button>
             </div>
+            {imageError && <span className="text-[10px] text-rose-500 mt-0.5 block">{imageError}</span>}
           </div>
         </form>
       </div>
@@ -184,9 +194,9 @@ export const OutstandingTab: React.FC = () => {
                       <td className="py-3 px-4 font-mono font-semibold">{formatINR(balance)}</td>
                       <td className="py-3 px-4 text-slate-600">{formatDate(item.dueDate)}</td>
                       <td className="py-3 px-4">
-                        {item.screenshot ? (
+                        {item.screenshotId ? (
                           <button
-                            onClick={() => setPreviewImage(item.screenshot || null)}
+                            onClick={() => openImage(item.screenshotId)}
                             className="flex items-center gap-1 text-emerald-600 hover:underline font-medium"
                           >
                             <Image className="w-3.5 h-3.5" /> View

@@ -1,0 +1,345 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SM HBD CRM API (Cloudflare Worker)",
+    "version": "1"
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Health and database status",
+        "x-access": "public",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/version": {
+      "get": {
+        "summary": "Commit that is live",
+        "x-access": "public",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/actuator/health": {
+      "get": {
+        "summary": "Health with database check",
+        "x-access": "public",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/actuator/health/liveness": {
+      "get": {
+        "summary": "Liveness",
+        "x-access": "public",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "summary": "The logged-in user: email, role, linked staff member and department",
+        "x-access": "login",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/departments": {
+      "get": {
+        "summary": "Departments with monthly targets",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/departments/{name}": {
+      "put": {
+        "summary": "Set a department target ({target})",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/staff": {
+      "get": {
+        "summary": "Active staff (email and login status only for ADMIN)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a staff member",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/staff/{id}": {
+      "put": {
+        "summary": "Change a staff member (only the fields sent)",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a staff member (past entries stay)",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/revenue": {
+      "get": {
+        "summary": "Revenue entries in scope (?from&to); no cost for STAFF",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "summary": "New revenue entry (+ outstanding row when not fully paid)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/revenue/{id}": {
+      "put": {
+        "summary": "Change a revenue entry (its outstanding row follows)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a revenue entry and its outstanding row",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE"
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/outstanding": {
+      "get": {
+        "summary": "Outstanding payments in scope",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "summary": "Add an outstanding payment without a revenue entry",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/outstanding/{id}/receive": {
+      "post": {
+        "summary": "Record a payment received ({amount})",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/daily-updates": {
+      "get": {
+        "summary": "Daily updates (own department for INCHARGE / STAFF; ?from&to)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "summary": "Post a daily update",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/attachments/{id}": {
+      "get": {
+        "summary": "A slip / screenshot image of an entry the caller may see",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/accounts-logins": {
+      "get": {
+        "summary": "Accounts team emails",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "summary": "Add an accounts team email",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/accounts-logins/{email}": {
+      "delete": {
+        "summary": "Remove an accounts team email",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/logins": {
+      "post": {
+        "summary": "Create a login or set its password ({email, password})",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  }
+}

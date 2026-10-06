@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { formatINR, formatDate } from '../utils/formatters';
 import { RevenueEntry, PaymentStatus, RevenueType } from '../types';
 import { ImageViewerModal } from './ImageViewerModal';
+import { shrinkImage } from '../lib/image';
 import { Plus, Trash2, Edit3, Image, CheckCircle, Clock, XCircle, Search } from 'lucide-react';
 
 export const RevenueEntriesTab: React.FC = () => {
@@ -14,6 +15,7 @@ export const RevenueEntriesTab: React.FC = () => {
     deleteRevenueEntry,
     role,
     currentStaffId,
+    loadImage,
   } = useApp();
 
   const [showForm, setShowForm] = useState(false);
@@ -22,7 +24,7 @@ export const RevenueEntriesTab: React.FC = () => {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [staffId, setStaffId] = useState(role === 'Staff' ? currentStaffId : staffList[0]?.id || '');
+  const [staffId, setStaffId] = useState(currentStaffId || staffList[0]?.id || '');
   const [client, setClient] = useState('');
   const [type, setType] = useState<RevenueType>('Individual');
   const [amount, setAmount] = useState('');
@@ -31,25 +33,35 @@ export const RevenueEntriesTab: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Paid');
   const [amountReceived, setAmountReceived] = useState('');
   const [dueDate, setDueDate] = useState('');
+  // A newly chosen slip (shrunk data URL); an entry being edited keeps its saved slip unless a new one is chosen.
   const [slipImage, setSlipImage] = useState<string>('');
+  const [savedSlipId, setSavedSlipId] = useState<string>('');
+  const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSlipImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    try {
+      setSlipImage(await shrinkImage(file));
+      setErrors(prev => ({ ...prev, slip: '' }));
+    } catch (err: any) {
+      setErrors(prev => ({ ...prev, slip: err?.message || 'This image could not be read.' }));
     }
+  };
+
+  const openImage = async (id?: string) => {
+    if (!id) return;
+    const url = await loadImage(id);
+    if (url) setPreviewImage(url);
   };
 
   const validateForm = () => {
     const errs: Record<string, string> = {};
     if (!client.trim()) errs.client = 'Client name is required';
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) errs.amount = 'Valid amount is required';
-    if (!cost || isNaN(Number(cost)) || Number(cost) < 0) errs.cost = 'Valid cost is required';
+    // Team members do not enter cost (they never see it); the API keeps cost for them.
+    if (role !== 'Staff' && (cost === '' || isNaN(Number(cost)) || Number(cost) < 0)) errs.cost = 'Valid cost is required';
     if (paymentStatus === 'Partly paid' && (!amountReceived || Number(amountReceived) >= Number(amount))) {
       errs.amountReceived = 'Valid partial amount received required';
     }
@@ -57,55 +69,35 @@ export const RevenueEntriesTab: React.FC = () => {
     return Object.keys(errs).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
-
-    const selectedStaff = staffList.find(s => s.id === staffId);
-    const staffName = selectedStaff?.name || 'Unknown';
-    const dept = selectedStaff?.dept || 'AIROLI';
+    if (!validateForm() || saving) return;
 
     const numAmount = Number(amount);
-    const numCost = Number(cost);
     let finalReceived = numAmount;
     if (paymentStatus === 'Outstanding') finalReceived = 0;
     if (paymentStatus === 'Partly paid') finalReceived = Number(amountReceived) || 0;
 
-    if (editingId) {
-      updateRevenueEntry(editingId, {
-        date,
-        staffId,
-        staffName,
-        dept,
-        client,
-        type,
-        amount: numAmount,
-        cost: numCost,
-        isNewClient,
-        paymentStatus,
-        amountReceived: finalReceived,
-        dueDate: dueDate || undefined,
-        slipImage: slipImage || undefined,
-      });
-      setEditingId(null);
-    } else {
-      addRevenueEntry({
-        date,
-        staffId,
-        staffName,
-        dept,
-        client,
-        type,
-        amount: numAmount,
-        cost: numCost,
-        isNewClient,
-        paymentStatus,
-        amountReceived: finalReceived,
-        dueDate: dueDate || undefined,
-        slipImage: slipImage || undefined,
-      });
-    }
+    const input = {
+      date,
+      staffId,
+      client,
+      type,
+      amount: numAmount,
+      cost: role === 'Staff' ? undefined : Number(cost),
+      isNewClient,
+      paymentStatus,
+      amountReceived: finalReceived,
+      dueDate: paymentStatus === 'Paid' ? undefined : dueDate || undefined,
+      slipImage: slipImage || undefined,
+    };
 
+    setSaving(true);
+    const ok = editingId ? await updateRevenueEntry(editingId, input) : await addRevenueEntry(input);
+    setSaving(false);
+    if (!ok) return; // the reason shows in the bar at the top; the form keeps what was typed
+
+    setEditingId(null);
     setClient('');
     setAmount('');
     setCost('');
@@ -114,6 +106,7 @@ export const RevenueEntriesTab: React.FC = () => {
     setAmountReceived('');
     setDueDate('');
     setSlipImage('');
+    setSavedSlipId('');
     setShowForm(false);
     setErrors({});
   };
@@ -130,7 +123,8 @@ export const RevenueEntriesTab: React.FC = () => {
     setPaymentStatus(entry.paymentStatus);
     setAmountReceived(String(entry.amountReceived));
     setDueDate(entry.dueDate || '');
-    setSlipImage(entry.slipImage || '');
+    setSlipImage('');
+    setSavedSlipId(entry.slipId || '');
     setShowForm(true);
   };
 
@@ -330,6 +324,12 @@ export const RevenueEntriesTab: React.FC = () => {
                   <span className="text-xs text-emerald-600 font-medium">Slip attached successfully</span>
                 </div>
               )}
+              {!slipImage && savedSlipId && (
+                <button type="button" onClick={() => openImage(savedSlipId)} className="mt-2 text-xs underline text-slate-600">
+                  View saved slip (choose a file to replace it)
+                </button>
+              )}
+              {errors.slip && <span className="text-[10px] text-rose-500 mt-0.5 block">{errors.slip}</span>}
             </div>
 
             <div className="sm:col-span-2 lg:col-span-3 flex justify-end gap-3 pt-2">
@@ -342,9 +342,10 @@ export const RevenueEntriesTab: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-semibold text-white bg-[#1b7a54] rounded-xl shadow-md hover:bg-[#156344] transition-all"
+                disabled={saving}
+                className="px-5 py-2 text-xs font-semibold text-white bg-[#1b7a54] rounded-xl shadow-md hover:bg-[#156344] transition-all disabled:opacity-50"
               >
-                {editingId ? 'Update Entry' : 'Save Entry'}
+                {saving ? 'Saving...' : editingId ? 'Update Entry' : 'Save Entry'}
               </button>
             </div>
           </form>
@@ -421,9 +422,9 @@ export const RevenueEntriesTab: React.FC = () => {
                       )}
                       <td className="py-4 px-6">{badge}</td>
                       <td className="py-4 px-6">
-                        {entry.slipImage ? (
+                        {entry.slipId ? (
                           <button
-                            onClick={() => setPreviewImage(entry.slipImage || null)}
+                            onClick={() => openImage(entry.slipId)}
                             className="flex items-center gap-1 text-xs text-emerald-600 hover:underline font-medium"
                           >
                             <Image className="w-4 h-4" /> View
@@ -441,13 +442,19 @@ export const RevenueEntriesTab: React.FC = () => {
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => deleteRevenueEntry(entry.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {role !== 'Staff' && (
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Delete the entry for ${entry.client} (${formatINR(entry.amount)})? Its outstanding payment is deleted too.`)) {
+                                  deleteRevenueEntry(entry.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

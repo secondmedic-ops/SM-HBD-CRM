@@ -31,11 +31,12 @@ export function formatDate(dateStr: string): string {
 }
 
 /**
- * Get current date string YYYY-MM-DD
+ * Today's date YYYY-MM-DD on this device's clock (India). toISOString() would give UTC, which is still yesterday
+ * until 05:30 IST.
  */
 export function getTodayString(): string {
   const now = new Date();
-  return now.toISOString().split('T')[0];
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 /**

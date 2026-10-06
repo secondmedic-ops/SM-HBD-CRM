@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatINR } from '../utils/formatters';
 import { DepartmentName, Staff } from '../types';
-import { Trash2, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 export const StaffMappingTab: React.FC = () => {
   const {
@@ -12,14 +12,15 @@ export const StaffMappingTab: React.FC = () => {
     addStaff,
     updateStaff,
     deleteStaff,
-    accountsTeamLogins,
+    accountsLogins,
     addAccountsLogin,
     removeAccountsLogin,
+    setLoginPassword,
   } = useApp();
 
-  const [linkedAccounts, setLinkedAccounts] = useState<Record<string, boolean>>({
-    'stf-1': true,
-  });
+  // Password typed for a login (per email) until "Create login" / "Set password" is pressed.
+  const [passwords, setPasswords] = useState<Record<string, string>>({});
+  const [busyEmail, setBusyEmail] = useState('');
 
   // New staff inline add form
   const [newName, setNewName] = useState('');
@@ -31,15 +32,51 @@ export const StaffMappingTab: React.FC = () => {
 
   const [newEmail, setNewEmail] = useState('');
 
-  const handleToggleLink = (staffId: string) => {
-    setLinkedAccounts(prev => ({ ...prev, [staffId]: !prev[staffId] }));
+  const saveLogin = async (email: string) => {
+    const pw = passwords[email] || '';
+    if (!email || pw.length < 8) return;
+    setBusyEmail(email);
+    const ok = await setLoginPassword(email, pw);
+    setBusyEmail('');
+    if (ok) setPasswords(prev => ({ ...prev, [email]: '' }));
   };
 
-  const handleAddStaffSubmit = (e: React.FormEvent) => {
+  /** Email + login controls for one person (staff row or accounts email). */
+  const loginControls = (email: string | undefined, hasLogin: boolean | undefined) => {
+    const key = (email || '').trim().toLowerCase();
+    const pw = passwords[key] || '';
+    const busy = key !== '' && busyEmail === key;
+    return (
+      <div className="flex items-center gap-2">
+        <span className={hasLogin ? 'text-emerald-700 font-semibold w-20' : 'text-slate-500 font-semibold w-20'}>
+          {hasLogin ? 'Login active' : 'No login'}
+        </span>
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder={hasLogin ? 'New password' : 'Password (min 8)'}
+          value={pw}
+          disabled={!key}
+          onChange={e => setPasswords(prev => ({ ...prev, [key]: e.target.value }))}
+          className="w-36 bg-[#fbfaf6] border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:border-[#1b7a54] disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={() => saveLogin(key)}
+          disabled={!key || pw.length < 8 || busy}
+          className="px-3 py-1 text-xs font-semibold text-white bg-[#1b7a54] disabled:opacity-40"
+        >
+          {busy ? 'Saving...' : hasLogin ? 'Set password' : 'Create login'}
+        </button>
+      </div>
+    );
+  };
+
+  const handleAddStaffSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newDesignation.trim() || !newProject.trim()) return;
 
-    addStaff({
+    const ok = await addStaff({
       name: newName,
       dept: newDept,
       role: newRole,
@@ -47,6 +84,7 @@ export const StaffMappingTab: React.FC = () => {
       project: newProject,
       individualTarget: Number(newTarget) || 150000,
     });
+    if (!ok) return;
 
     setNewName('');
     setNewDesignation('');
@@ -54,11 +92,10 @@ export const StaffMappingTab: React.FC = () => {
     setNewTarget('150000');
   };
 
-  const handleAddAccountEmail = (e: React.FormEvent) => {
+  const handleAddAccountEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmail.trim() || !newEmail.includes('@')) return;
-    addAccountsLogin(newEmail.trim());
-    setNewEmail('');
+    if (await addAccountsLogin(newEmail.trim())) setNewEmail('');
   };
 
   return (
@@ -113,13 +150,15 @@ export const StaffMappingTab: React.FC = () => {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500 p-6">
         <h3 className="text-base font-bold text-slate-900 mb-1">Department-wise logins</h3>
         <p className="text-xs text-slate-500 mb-6">
-          Link each person's account once. They then open the CRM straight into their own view and fill data daily. An Incharge also sees the whole department.
+          Put each person's work email on their row once: when they sign in with it they open the CRM straight into their
+          own view and fill data daily. An Incharge also sees the whole department. Then set a password with Create login
+          and share it with them.
         </p>
 
         <div className="space-y-6">
           {departments.map(dept => {
             const deptStaff = staffList.filter(s => s.dept === dept.name);
-            const linkedCount = deptStaff.filter(s => linkedAccounts[s.id]).length;
+            const linkedCount = deptStaff.filter(s => s.email).length;
 
             return (
               <div key={dept.name} className="space-y-2">
@@ -134,30 +173,22 @@ export const StaffMappingTab: React.FC = () => {
                   <p className="text-xs text-slate-400 pl-4">No staff</p>
                 ) : (
                   <div className="space-y-2 pl-4">
-                    {deptStaff.map(s => {
-                      const isLinked = !!linkedAccounts[s.id];
-                      return (
-                        <div key={s.id} className="flex items-center justify-between max-w-xl text-xs">
-                          <div>
-                            <strong className="text-slate-900">{s.name}</strong>{' '}
-                            <span className="text-slate-500">{s.designation}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className={isLinked ? 'text-emerald-600 font-semibold' : 'text-rose-600 font-semibold'}>
-                              {isLinked ? 'Linked' : 'Not linked'}
-                            </span>
-                            <button
-                              onClick={() => handleToggleLink(s.id)}
-                              className={`px-3 py-1 text-xs font-semibold rounded-lg text-white transition-all ${
-                                isLinked ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700'
-                              }`}
-                            >
-                              {isLinked ? 'Linked account' : 'Link account'}
-                            </button>
-                          </div>
+                    {deptStaff.map(s => (
+                      <div key={s.id} className="flex flex-wrap items-center gap-3 text-xs">
+                        <div className="w-56">
+                          <strong className="text-slate-900">{s.name}</strong>{' '}
+                          <span className="text-slate-500">{s.designation}</span>
                         </div>
-                      );
-                    })}
+                        <input
+                          type="email"
+                          placeholder="name@secondmedic.com"
+                          value={s.email ?? ''}
+                          onChange={e => updateStaff(s.id, { email: e.target.value })}
+                          className="w-60 bg-[#fbfaf6] border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:border-[#1b7a54]"
+                        />
+                        {loginControls(s.email, s.hasLogin)}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -243,7 +274,9 @@ export const StaffMappingTab: React.FC = () => {
                   </td>
                   <td className="py-3 px-4 text-center">
                     <button
-                      onClick={() => deleteStaff(stf.id)}
+                      onClick={() => {
+                        if (window.confirm(`Remove ${stf.name} from the team? Their past entries stay in the reports.`)) deleteStaff(stf.id);
+                      }}
                       className="p-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors inline-flex items-center justify-center"
                       title="Delete"
                     >
@@ -337,18 +370,23 @@ export const StaffMappingTab: React.FC = () => {
       {/* Accounts Team Logins Section */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500 p-6">
         <h3 className="text-base font-bold text-slate-900 mb-4">Accounts team logins</h3>
-        {accountsTeamLogins.length === 0 ? (
+        {accountsLogins.length === 0 ? (
           <p className="text-xs text-slate-400 mb-4">No accounts team member linked yet.</p>
         ) : (
           <div className="space-y-2 mb-4">
-            {accountsTeamLogins.map(email => (
-              <div key={email} className="flex items-center justify-between max-w-md p-2.5 bg-slate-50 rounded-xl text-xs">
-                <span className="font-medium text-slate-800">{email}</span>
+            {accountsLogins.map(a => (
+              <div key={a.email} className="flex flex-wrap items-center gap-3 p-2.5 bg-slate-50 border border-slate-200 text-xs">
+                <span className="font-medium text-slate-800 w-60">{a.email}</span>
+                {loginControls(a.email, a.hasLogin)}
                 <button
-                  onClick={() => removeAccountsLogin(email)}
-                  className="text-slate-400 hover:text-rose-600"
+                  onClick={() => {
+                    if (window.confirm(`Remove ${a.email} from the accounts team? Their login stays but no longer opens the CRM.`)) {
+                      removeAccountsLogin(a.email);
+                    }
+                  }}
+                  className="text-slate-500 underline"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  Remove
                 </button>
               </div>
             ))}

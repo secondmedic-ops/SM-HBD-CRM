@@ -1,0 +1,4 @@
+# Files retired by earlier changes. scripts/ship.mjs deletes them (git rm) before every ship.
+# 2026-10-06: the app reads everything from the API; the AI Studio sample data and the bun lockfile (npm is used) are gone.
+src/data/seed.ts
+bun.lock

@@ -12,6 +12,9 @@ export const Header: React.FC = () => {
     currentStaffId,
     setCurrentStaffId,
     staffList,
+    canSwitchRole,
+    me,
+    signOut,
   } = useApp();
 
   const roleIcons = {
@@ -53,7 +56,8 @@ export const Header: React.FC = () => {
             />
           </div>
 
-          {/* Role Switcher */}
+          {/* Role Switcher: only an Admin can preview the other views; everyone else sees their own */}
+          {canSwitchRole ? (
           <div className="flex items-center gap-1 bg-white/15 backdrop-blur-md p-1 rounded-xl border border-white/20">
             <span className="px-2 text-xs font-medium text-white/80 hidden sm:inline">View as:</span>
             {(['Admin', 'Accounts team', 'Incharge', 'Staff'] as Role[]).map(r => (
@@ -71,9 +75,15 @@ export const Header: React.FC = () => {
               </button>
             ))}
           </div>
+          ) : (
+            <span className="flex items-center gap-1.5 bg-white/15 px-3 py-1.5 rounded-xl border border-white/20 text-xs font-medium">
+              {roleIcons[role]}
+              <span>{role}{me.staffName ? `: ${me.staffName}` : ''}</span>
+            </span>
+          )}
 
-          {/* If role is Staff, pick specific staff member */}
-          {role === 'Staff' && (
+          {/* Admin previewing a staff / incharge view: pick the person */}
+          {canSwitchRole && (role === 'Staff' || role === 'Incharge') && (
             <select
               value={currentStaffId}
               onChange={e => setCurrentStaffId(e.target.value)}
@@ -85,6 +95,15 @@ export const Header: React.FC = () => {
                 </option>
               ))}
             </select>
+          )}
+
+          {me.authMode === 'supabase' && (
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-white/80 hidden lg:inline">{me.email}</span>
+              <button onClick={signOut} className="px-3 py-1.5 border border-white/40 text-white font-medium">
+                Sign out
+              </button>
+            </div>
           )}
         </div>
       </div>

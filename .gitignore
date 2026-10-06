@@ -6,3 +6,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local tools and secrets
+.idea/
+*.iml
+.wrangler/
+.dev.vars*
+# Written by the pipeline (step 5) with the real Hyperdrive id
+cloudflare/wrangler.deploy.jsonc
+secrets.json
+
+# Supabase CLI temp files and local setup notes
+supabase/.temp/
+MY-SETUP-DETAILS.json
+

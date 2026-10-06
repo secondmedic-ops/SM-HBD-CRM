@@ -15,7 +15,10 @@ export interface Staff {
   designation: string;
   project: string;
   individualTarget: number;
+  /** Work email of the person's login (only sent to Admin). */
   email?: string;
+  /** Admin only: a login exists for that email. */
+  hasLogin?: boolean;
 }
 
 export type PaymentStatus = 'Paid' | 'Partly paid' | 'Outstanding';
@@ -31,12 +34,14 @@ export interface RevenueEntry {
   client: string;
   type: RevenueType;
   amount: number;
+  /** The API does not send cost to team members (Staff role); the app shows 0 for them. */
   cost: number;
   isNewClient: boolean;
   paymentStatus: PaymentStatus;
   amountReceived: number;
   dueDate?: string;
-  slipImage?: string; // base64 or image url
+  /** Id of the payment slip image (load it with api.attachment). */
+  slipId?: string;
   createdAt: string;
 }
 
@@ -51,7 +56,8 @@ export interface OutstandingPayment {
   amountPaid: number;
   dueDate: string;
   status: 'Pending' | 'Paid';
-  screenshot?: string;
+  /** Id of the screenshot image (load it with api.attachment). */
+  screenshotId?: string;
   createdAt: string;
 }
 
