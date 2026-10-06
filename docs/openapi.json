@@ -62,7 +62,7 @@
     },
     "/api/v1/departments": {
       "get": {
-        "summary": "Departments with monthly targets",
+        "summary": "Departments with monthly targets (INCHARGE / STAFF: only their own)",
         "x-access": [
           "ADMIN",
           "ACCOUNTS",
@@ -91,7 +91,7 @@
     },
     "/api/v1/staff": {
       "get": {
-        "summary": "Active staff with their incharge (email and login status: ADMIN, INCHARGE for own team)",
+        "summary": "Active staff with their incharge (INCHARGE / STAFF: own department, team and incharge only; email: ADMIN, INCHARGE for own team)",
         "x-access": [
           "ADMIN",
           "ACCOUNTS",
