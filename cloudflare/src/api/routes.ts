@@ -35,10 +35,10 @@ export const ROUTES: Route[] = [
   { method: 'GET', path: '/api/actuator/health/liveness', access: 'public', summary: 'Liveness' },
   { method: 'GET', path: '/api/v1/me', access: 'login', summary: 'The logged-in user: email, role, linked staff member and department' },
 
-  { method: 'GET', path: '/api/v1/departments', access: ALL, summary: 'Departments with monthly targets', handler: listDepartments },
+  { method: 'GET', path: '/api/v1/departments', access: ALL, summary: 'Departments with monthly targets (INCHARGE / STAFF: only their own)', handler: listDepartments },
   { method: 'PUT', path: '/api/v1/departments/{name}', access: ADMIN, summary: 'Set a department target ({target})', handler: setDepartmentTarget },
 
-  { method: 'GET', path: '/api/v1/staff', access: ALL, summary: 'Active staff with their incharge (email and login status: ADMIN, INCHARGE for own team)', handler: listStaff },
+  { method: 'GET', path: '/api/v1/staff', access: ALL, summary: 'Active staff with their incharge (INCHARGE / STAFF: own department, team and incharge only; email: ADMIN, INCHARGE for own team)', handler: listStaff },
   { method: 'POST', path: '/api/v1/staff', access: ['ADMIN', 'INCHARGE'], status: 201, summary: 'Add a staff member (INCHARGE: a Team member of their own team)', handler: createStaff },
   { method: 'PUT', path: '/api/v1/staff/{id}', access: ['ADMIN', 'INCHARGE'], summary: 'Change a staff member (only the fields sent; INCHARGE: own team, no role / dept / incharge)', handler: updateStaff },
   { method: 'DELETE', path: '/api/v1/staff/{id}', access: ['ADMIN', 'INCHARGE'], status: 204, summary: 'Remove a staff member (past entries stay; INCHARGE: own team)', handler: deleteStaff },

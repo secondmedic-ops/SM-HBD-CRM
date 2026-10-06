@@ -50,8 +50,12 @@ interface AppContextType {
   notice: Notice | null;
   clearNotice: () => void;
   reload: () => Promise<void>;
+  /** Departments and staff of the current view: incharge / staff views show only their own department
+   *  (plus the incharge's team and a team member's incharge). The API already limits real incharge / staff logins. */
   departments: Department[];
   staffList: Staff[];
+  /** Everyone the login may see, whatever the view (Admin's "View as" person picker). */
+  allStaff: Staff[];
   revenueEntries: RevenueEntry[];
   outstandingPayments: OutstandingPayment[];
   dailyUpdates: DailyUpdate[];
@@ -201,6 +205,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return staffList.find(s => s.id === staffId)?.inchargeId === currentStaffId;
   };
 
+  // Incharge / staff views: only their own department (what the API sends such logins; this also makes Admin's
+  // "View as" preview match).
+  const viewed = staffList.find(s => s.id === currentStaffId);
+  const ownView = (role === 'Incharge' || role === 'Staff') && !!viewed;
+  const viewDepartments = ownView ? departments.filter(d => d.name === viewed!.dept) : departments;
+  const viewStaff = ownView
+    ? staffList.filter(s => s.dept === viewed!.dept || s.id === viewed!.id
+        || (role === 'Incharge' ? s.inchargeId === viewed!.id : s.id === viewed!.inchargeId))
+    : staffList;
+
   const setFilters = (newFilters: Partial<FilterState>) => setFiltersState(prev => ({ ...prev, ...newFilters }));
   const clearFilters = () => setFiltersState(emptyFilters);
 
@@ -315,8 +329,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notice,
         clearNotice: () => setNotice(null),
         reload,
-        departments,
-        staffList,
+        departments: viewDepartments,
+        staffList: viewStaff,
+        allStaff: staffList,
         revenueEntries,
         outstandingPayments,
         dailyUpdates,

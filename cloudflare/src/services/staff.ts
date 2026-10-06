@@ -17,8 +17,11 @@ const n = (v: unknown) => (v === null || v === undefined ? 0 : Number(v));
 
 // ---- Departments -------------------------------------------------------------------------------------------------
 
+/** ADMIN / ACCOUNTS: all departments. INCHARGE / STAFF: only their own department (no other department's target). */
 export async function listDepartments(c: Ctx) {
-  const rows = await c.sql`select name, target::text from public.departments order by sort_order, name`;
+  const { sql } = c;
+  const own = c.user.role === 'ADMIN' || c.user.role === 'ACCOUNTS' ? sql`` : sql`where name = ${c.user.dept ?? '-'}`;
+  const rows = await sql`select name, target::text from public.departments ${own} order by sort_order, name`;
   return rows.map((r) => ({ name: r.name, target: n(r.target) }));
 }
 
@@ -71,8 +74,19 @@ const selectStaff = (c: Ctx) => c.sql`
   from public.staff s join public.departments d on d.name = s.dept
   left join public.staff i on i.id = s.incharge_id and i.active`;
 
+/**
+ * ADMIN / ACCOUNTS: everyone. INCHARGE: their department and their own team. STAFF: their department, themselves and
+ * their incharge. Nobody else's department shows (Staff directory, filters, dashboard).
+ */
 export async function listStaff(c: Ctx) {
-  const rows = await c.sql`${selectStaff(c)} where s.active order by d.sort_order, (s.role = 'Incharge') desc, s.name`;
+  const { sql } = c;
+  const none = '00000000-0000-0000-0000-000000000000';
+  const me = c.user.staffId ?? none;
+  const scope = c.user.role === 'ADMIN' || c.user.role === 'ACCOUNTS' ? sql``
+    : c.user.role === 'INCHARGE'
+      ? sql`and (s.dept = ${c.user.dept ?? '-'} or s.id = ${me}::uuid or s.incharge_id = ${me}::uuid)`
+      : sql`and (s.dept = ${c.user.dept ?? '-'} or s.id = ${me}::uuid or s.id = ${c.user.inchargeId ?? none}::uuid)`;
+  const rows = await sql`${selectStaff(c)} where s.active ${scope} order by d.sort_order, (s.role = 'Incharge') desc, s.name`;
   return rows.map((r) => staffJson(r, showsPrivate(c, r)));
 }
 

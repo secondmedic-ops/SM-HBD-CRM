@@ -80,13 +80,18 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('team member role from staff row', [meS.role, meS.dept, meS.staffId], ['STAFF', 'AIROLI', supriya.id]);
   eq('accounts role from accounts list', (await call('accounts', 'GET', '/api/v1/me')).body?.role, 'ACCOUNTS');
   const asStaff = (await call('staff', 'GET', '/api/v1/staff')).body;
-  check('staff list: no emails for non-admins', asStaff.length === 10 && asStaff.every((s) => !('email' in s) && !('hasLogin' in s)), JSON.stringify(asStaff[0]));
+  check('staff list: no emails for non-admins', asStaff.every((s) => !('email' in s) && !('hasLogin' in s)), JSON.stringify(asStaff[0]));
+  eq('team member sees only their own department', asStaff.map((s) => s.name).sort(), ['Manoj', 'Sakshi', 'Supriya']);
+  eq('other department sees only theirs', (await call('other', 'GET', '/api/v1/staff')).body.map((s) => s.name), ['Nihal']);
+  eq('accounts sees every department', (await call('accounts', 'GET', '/api/v1/staff')).body.length, 10);
   check('staff list: admin sees email + login status', byName((await call('admin', 'GET', '/api/v1/staff')).body, 'Manoj')?.hasLogin === true);
 
   // ---- Departments ----------------------------------------------------------------------------------------------
-  const depts = (await call('staff', 'GET', '/api/v1/departments')).body;
+  const depts = (await call('admin', 'GET', '/api/v1/departments')).body;
   eq('departments', depts.map((d) => d.name), ['AIROLI', 'MDSA', 'CORPORATE', 'BD', 'CAMPAIGN']);
   eq('MDSA target', depts[1].target, 700000);
+  eq('team member sees only their department', (await call('staff', 'GET', '/api/v1/departments')).body.map((d) => d.name), ['AIROLI']);
+  eq('incharge sees only their department', (await call('incharge', 'GET', '/api/v1/departments')).body.map((d) => d.name), ['AIROLI']);
   eq('staff cannot set a target', (await call('staff', 'PUT', '/api/v1/departments/BD', { target: 1 })).status, 403);
   eq('negative target: 400', (await call('admin', 'PUT', '/api/v1/departments/BD', { target: -1 })).status, 400);
   eq('admin sets BD target', (await call('admin', 'PUT', '/api/v1/departments/BD', { target: 650000 })).body?.target, 650000);
@@ -106,8 +111,8 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('migration: team members report to their department\'s only incharge',
     ['Supriya', 'Sakshi', 'Mansi', 'Nihal'].map((x) => byName(staffA, x)?.inchargeName ?? null), ['Manoj', 'Manoj', 'Ranju', null]);
   const asInch = (await call('incharge', 'GET', '/api/v1/staff')).body;
-  check('incharge sees emails of own team only', byName(asInch, 'Supriya')?.email === email('staff') && !('email' in byName(asInch, 'Nihal')),
-    JSON.stringify([byName(asInch, 'Supriya'), byName(asInch, 'Nihal')]));
+  check('incharge sees emails of own team only', byName(asInch, 'Supriya')?.email === email('staff') && asInch.every((x) => x.dept === 'AIROLI'),
+    JSON.stringify(asInch));
   const asha = await call('incharge', 'POST', '/api/v1/staff', { name: 'Asha', role: 'Incharge', dept: 'BD', inchargeId: nihal.id,
     designation: 'BDE', project: 'AIROLI Lab', individualTarget: 120000, email: 'asha@rehearsal.test' });
   eq('incharge adds a team member to own team', [asha.status, asha.body?.role, asha.body?.dept, asha.body?.inchargeId, asha.body?.email],

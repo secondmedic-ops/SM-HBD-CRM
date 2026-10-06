@@ -11,7 +11,7 @@ export const Header: React.FC = () => {
     setSelectedMonth,
     currentStaffId,
     setCurrentStaffId,
-    staffList,
+    allStaff: staffList,
     canSwitchRole,
     me,
     signOut,
