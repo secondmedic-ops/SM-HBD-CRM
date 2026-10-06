@@ -275,6 +275,126 @@
         }
       }
     },
+    "/api/v1/clients": {
+      "get": {
+        "summary": "Clients in scope (?q&status) with visit count, last visit, next follow-up",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a client (owner: the caller, or staffId for incharge / admin)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/clients/{id}": {
+      "put": {
+        "summary": "Change a client (only the fields sent; staffId hands it over)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a client without revenue entries (visits go with it)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/visits": {
+      "get": {
+        "summary": "Visits of clients in scope (?clientId&from&to)",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "summary": "Log a visit / call / meeting with a client",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/visits/{id}": {
+      "put": {
+        "summary": "Change a visit",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a visit",
+        "x-access": [
+          "ADMIN",
+          "ACCOUNTS",
+          "INCHARGE",
+          "STAFF"
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/attachments/{id}": {
       "get": {
         "summary": "A slip / screenshot image of an entry the caller may see",

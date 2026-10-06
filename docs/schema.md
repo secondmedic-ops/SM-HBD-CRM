@@ -29,6 +29,42 @@
 | before | jsonb | YES |
 | after | jsonb | YES |
 
+## client_visits
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| client_id | uuid | NO |
+| staff_id | uuid | NO |
+| visit_date | date | NO |
+| kind | text | NO |
+| purpose | text | NO |
+| notes | text | NO |
+| next_follow_up | date | YES |
+| created_by | uuid | YES |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
+## clients
+| column | type | nullable |
+|---|---|---|
+| id | uuid | NO |
+| name | text | NO |
+| type | text | NO |
+| category | text | NO |
+| contact_person | text | NO |
+| phone | text | YES |
+| email | text | YES |
+| address | text | NO |
+| city | text | NO |
+| pincode | text | YES |
+| status | text | NO |
+| notes | text | NO |
+| staff_id | uuid | NO |
+| dept | text | NO |
+| created_by | uuid | YES |
+| created_at | timestamp with time zone | NO |
+| updated_at | timestamp with time zone | NO |
+
 ## daily_updates
 | column | type | nullable |
 |---|---|---|
@@ -95,6 +131,7 @@
 | created_by | uuid | YES |
 | created_at | timestamp with time zone | NO |
 | updated_at | timestamp with time zone | NO |
+| client_id | uuid | YES |
 
 ## staff
 | column | type | nullable |
