@@ -16,6 +16,7 @@ export const RevenueEntriesTab: React.FC = () => {
     role,
     currentStaffId,
     loadImage,
+    clients,
   } = useApp();
 
   const [showForm, setShowForm] = useState(false);
@@ -78,10 +79,13 @@ export const RevenueEntriesTab: React.FC = () => {
     if (paymentStatus === 'Outstanding') finalReceived = 0;
     if (paymentStatus === 'Partly paid') finalReceived = Number(amountReceived) || 0;
 
+    // A name picked from the Clients list links the entry to that client.
+    const linked = clients.find(c => c.name.toLowerCase() === client.trim().toLowerCase());
     const input = {
       date,
       staffId,
       client,
+      clientId: linked?.id,
       type,
       amount: numAmount,
       cost: role === 'Staff' ? undefined : Number(cost),
@@ -213,10 +217,17 @@ export const RevenueEntriesTab: React.FC = () => {
               <input
                 type="text"
                 placeholder="e.g. Apollo Hospital"
+                list="revenue-clients"
                 value={client}
                 onChange={e => setClient(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none"
               />
+              <datalist id="revenue-clients">
+                {clients.map(c => <option key={c.id} value={c.name} />)}
+              </datalist>
+              {client.trim() && clients.some(c => c.name.toLowerCase() === client.trim().toLowerCase()) && (
+                <span className="text-[10px] text-slate-500 mt-0.5 block">Linked to this client in Clients</span>
+              )}
               {errors.client && <span className="text-[10px] text-rose-500 mt-0.5 block">{errors.client}</span>}
             </div>
 

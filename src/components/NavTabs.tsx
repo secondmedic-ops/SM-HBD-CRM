@@ -13,8 +13,9 @@ import {
 export const NavTabs: React.FC = () => {
   const { activeTab, setActiveTab, role } = useApp();
 
-  const tabs = [
+  const tabs: { id: string; label: string; icon?: React.ComponentType<{ className?: string }> }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'clients', label: 'Clients' },
     { id: 'performance', label: 'Staff performance', icon: Trophy },
     { id: 'directory', label: 'Staff directory', icon: Users },
     { id: 'revenue', label: 'Revenue entries', icon: Receipt },
@@ -44,7 +45,7 @@ export const NavTabs: React.FC = () => {
                     : 'bg-[#f4ebe1] text-slate-800 hover:bg-[#eae0d2]'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-600'}`} />
+                {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-600'}`} />}
                 <span>{tab.label}</span>
               </button>
             );

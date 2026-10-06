@@ -12,6 +12,7 @@ import { outstandingFor, PAYMENT_STATUSES, receive, receivedFor, statusOf } from
 import { audit } from './audit';
 import { checkImage, deleteImages, saveImage } from './attachments';
 import { assertMayActFor, loadStaff, ownStaffId, rowScope } from './scope';
+import { visibleClient } from './clients';
 
 const TYPES = ['Individual', 'Corporate'] as const;
 const OLDEST = '2020-01-01';
@@ -21,7 +22,7 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v === null ||
 
 const ENTRY_COLUMNS = (c: Ctx) => c.sql`
   r.id::text, r.entry_date, r.staff_id::text, s.name as staff_name, r.dept, r.client, r.type, r.amount::text,
-  r.cost::text, r.is_new_client, r.amount_received::text, r.due_date, r.slip_id::text, r.created_at`;
+  r.cost::text, r.is_new_client, r.amount_received::text, r.due_date, r.slip_id::text, r.client_id::text, r.created_at`;
 
 /** One entry as the screens use it. STAFF get no cost (profit stays with incharges, accounts and admin). */
 function entryJson(c: Ctx, r: Record<string, any>) {
@@ -29,7 +30,7 @@ function entryJson(c: Ctx, r: Record<string, any>) {
     id: r.id, date: r.entry_date, staffId: r.staff_id, staffName: r.staff_name, dept: r.dept, client: r.client, type: r.type,
     amount: n(r.amount), cost: c.user.role === 'STAFF' ? null : n(r.cost), isNewClient: r.is_new_client,
     paymentStatus: statusOf(d0(r.amount), d0(r.amount_received)), amountReceived: n(r.amount_received), dueDate: r.due_date,
-    slipId: r.slip_id, createdAt: iso(r.created_at),
+    slipId: r.slip_id, clientId: r.client_id, createdAt: iso(r.created_at),
   };
 }
 
@@ -87,6 +88,8 @@ interface EntryInput {
   dueDate: string | null;
   slip: ReturnType<typeof checkImage>;
   removeSlip: boolean;
+  /** A client from the Clients list (its name becomes the entry's client name). */
+  clientId: string | null;
 }
 
 function parseEntry(body: unknown): EntryInput {
@@ -120,6 +123,7 @@ function parseEntry(body: unknown): EntryInput {
     cost: cost === null ? null : money(cost), isNewClient: bool(b.isNewClient) ?? false, status: status!,
     amountReceived: received === null ? null : money(received), dueDate: due,
     slip: checkImage('slipImage', b.slipImage), removeSlip: bool(b.removeSlip) ?? false,
+    clientId: str(b.clientId) || null,
   };
 }
 
@@ -150,8 +154,20 @@ async function saveOutstanding(tx: Tx, c: Ctx, entryId: string, e: EntryInput, r
 
 const uidOf = (c: Ctx) => (/^[0-9a-fA-F-]{36}$/.test(c.user.id) ? c.user.id : null);
 
+/** An entry naming a client from the Clients list takes that client's name; the client must be one the caller sees. */
+async function resolveClient(c: Ctx, e: EntryInput) {
+  if (!e.clientId) return;
+  if (!/^[0-9a-fA-F-]{36}$/.test(e.clientId)) throw new ApiError(400, 'Validation failed', { clientId: 'is not one of your clients' });
+  try {
+    e.client = (await visibleClient(c.sql, c, e.clientId)).name;
+  } catch {
+    throw new ApiError(400, 'Validation failed', { clientId: 'is not one of your clients' });
+  }
+}
+
 export async function createRevenue(c: Ctx, body: unknown) {
   const e = parseEntry(body);
+  await resolveClient(c, e);
   const staff = await loadStaff(c.sql, ownStaffId(c, e.staffId));
   assertMayActFor(c, staff);
   const received = receivedFor(e.status, e.amount, e.amountReceived);
@@ -160,9 +176,9 @@ export async function createRevenue(c: Ctx, body: unknown) {
     const slipId = e.slip ? await saveImage(tx, c.user.id, e.slip) : null;
     const [r] = await tx`
       insert into public.revenue_entries (entry_date, staff_id, dept, client, type, amount, cost, is_new_client, amount_received,
-                                          due_date, slip_id, created_by)
+                                          due_date, slip_id, client_id, created_by)
       values (${e.date}, ${staff.id}::uuid, ${staff.dept}, ${e.client}, ${e.type}, ${e.amount.toFixed(2)}, ${cost.toFixed(2)},
-              ${e.isNewClient}, ${received.toFixed(2)}, ${e.dueDate}, ${slipId}::uuid, ${uidOf(c)}::uuid)
+              ${e.isNewClient}, ${received.toFixed(2)}, ${e.dueDate}, ${slipId}::uuid, ${e.clientId}::uuid, ${uidOf(c)}::uuid)
       returning id::text`;
     await saveOutstanding(tx, c, r.id, e, received, staff, null);
     await audit(tx, c.user.id, 'CREATE', 'revenue_entries', r.id, null,
@@ -175,6 +191,7 @@ export async function createRevenue(c: Ctx, body: unknown) {
 export async function updateRevenue(c: Ctx, body: unknown) {
   const id = uuidParam(c.params.id, 'Revenue entry');
   const e = parseEntry(body);
+  await resolveClient(c, e);
   const staff = await loadStaff(c.sql, ownStaffId(c, e.staffId));
   assertMayActFor(c, staff);
   await c.sql.begin(async (tx) => {
@@ -196,7 +213,8 @@ export async function updateRevenue(c: Ctx, body: unknown) {
     await tx`
       update public.revenue_entries set entry_date = ${e.date}, staff_id = ${staff.id}::uuid, dept = ${staff.dept}, client = ${e.client},
         type = ${e.type}, amount = ${e.amount.toFixed(2)}, cost = ${cost.toFixed(2)}, is_new_client = ${e.isNewClient},
-        amount_received = ${received.toFixed(2)}, due_date = ${e.dueDate}, slip_id = ${slipId}::uuid, updated_at = now()
+        amount_received = ${received.toFixed(2)}, due_date = ${e.dueDate}, slip_id = ${slipId}::uuid, client_id = ${e.clientId}::uuid,
+        updated_at = now()
       where id = ${id}::uuid`;
     await saveOutstanding(tx, c, id, e, received, staff, prev);
     if (old.slip_id && old.slip_id !== slipId) await deleteImages(tx, [old.slip_id]);

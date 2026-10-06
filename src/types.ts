@@ -42,6 +42,8 @@ export interface RevenueEntry {
   dueDate?: string;
   /** Id of the payment slip image (load it with api.attachment). */
   slipId?: string;
+  /** The client from the Clients list this entry is for (the name above is that client's name). */
+  clientId?: string;
   createdAt: string;
 }
 
@@ -80,4 +82,45 @@ export interface FilterState {
   project: string;
   staffId: string;
   quickRange: 'today' | 'last7' | 'thisMonth' | 'lastMonth' | 'custom';
+}
+
+export type ClientStatus = 'Lead' | 'Active' | 'Inactive';
+export type VisitKind = 'Visit' | 'Call' | 'Meeting' | 'Demo' | 'Email' | 'Other';
+
+/** A client and its owner. Team members see only their own clients, an incharge the department's. */
+export interface Client {
+  id: string;
+  name: string;
+  type: RevenueType;
+  category: string;
+  contactPerson: string;
+  phone?: string;
+  email?: string;
+  address: string;
+  city: string;
+  pincode?: string;
+  status: ClientStatus;
+  notes: string;
+  staffId: string;
+  staffName: string;
+  dept: DepartmentName;
+  visitCount: number;
+  lastVisit?: string;
+  /** Next follow-up date written on the latest visit. */
+  nextFollowUp?: string;
+  createdAt: string;
+}
+
+export interface ClientVisit {
+  id: string;
+  clientId: string;
+  clientName: string;
+  staffId: string;
+  staffName: string;
+  date: string; // YYYY-MM-DD
+  kind: VisitKind;
+  purpose: string;
+  notes: string;
+  nextFollowUp?: string;
+  createdAt: string;
 }

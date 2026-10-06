@@ -14,8 +14,10 @@ import {
   OutstandingPayment,
   DailyUpdate,
   FilterState,
+  Client,
+  ClientVisit,
 } from '../types';
-import { AccountsLogin, api, ApiMe, OutstandingInput, RevenueInput, StaffInput } from '../api';
+import { AccountsLogin, api, ApiMe, ClientInput, OutstandingInput, RevenueInput, StaffInput, VisitInput } from '../api';
 import { useAuth } from '../AuthGate';
 
 const ROLE_VIEW: Record<NonNullable<ApiMe['role']>, Role> = {
@@ -51,6 +53,9 @@ interface AppContextType {
   revenueEntries: RevenueEntry[];
   outstandingPayments: OutstandingPayment[];
   dailyUpdates: DailyUpdate[];
+  /** Clients in this login's scope and their visits. */
+  clients: Client[];
+  visits: ClientVisit[];
   filters: FilterState;
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
@@ -69,6 +74,12 @@ interface AppContextType {
   deleteStaff: (id: string) => Promise<boolean>;
   updateDepartmentTarget: (deptName: DepartmentName, target: number) => Promise<boolean>;
   addDailyUpdate: (update: { date: string; staffId?: string; updateText: string; clientMetCount: number }) => Promise<boolean>;
+  addClient: (client: ClientInput) => Promise<Client | null>;
+  updateClient: (id: string, client: ClientInput) => Promise<boolean>;
+  deleteClient: (id: string) => Promise<boolean>;
+  addVisit: (visit: VisitInput) => Promise<boolean>;
+  updateVisit: (id: string, visit: VisitInput) => Promise<boolean>;
+  deleteVisit: (id: string) => Promise<boolean>;
   accountsLogins: AccountsLogin[];
   accountsTeamLogins: string[];
   addAccountsLogin: (email: string) => Promise<boolean>;
@@ -119,6 +130,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [outstandingPayments, setOutstandingPayments] = useState<OutstandingPayment[]>([]);
   const [dailyUpdates, setDailyUpdates] = useState<DailyUpdate[]>([]);
   const [accountsLogins, setAccountsLogins] = useState<AccountsLogin[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [visits, setVisits] = useState<ClientVisit[]>([]);
 
   const fail = (e: unknown) => setNotice({ kind: 'error', text: (e as Error)?.message || String(e) });
 
@@ -141,11 +154,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOutstandingPayments(out);
   };
   const loadStaff = async () => setStaffList(await api.staff());
+  const loadClients = async () => {
+    const [cl, vi] = await Promise.all([api.clients(), api.visits()]);
+    setClients(cl);
+    setVisits(vi);
+  };
   const loadAccounts = async () => { if (me.role === 'ADMIN') setAccountsLogins(await api.accountsLogins()); };
 
   const reload = useCallback(async () => {
     try {
-      const [d, s, upd] = await Promise.all([api.departments(), api.staff(), api.dailyUpdates(), loadRevenue(), loadAccounts()]);
+      const [d, s, upd] = await Promise.all([api.departments(), api.staff(), api.dailyUpdates(), loadRevenue(), loadAccounts(), loadClients()]);
       setDepartments(d);
       setStaffList(s);
       setDailyUpdates(upd);
@@ -231,6 +249,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addDailyUpdate = (update: { date: string; staffId?: string; updateText: string; clientMetCount: number }) =>
     attempt(async () => { await api.addDailyUpdate(update); setDailyUpdates(await api.dailyUpdates()); });
 
+  // ---- Clients and visits ---------------------------------------------------------------------------------------------
+  const addClient = async (client: ClientInput) => {
+    try {
+      const saved = await api.addClient(client);
+      await loadClients();
+      return saved;
+    } catch (e) {
+      fail(e);
+      return null;
+    }
+  };
+  const updateClient = (id: string, client: ClientInput) =>
+    attempt(async () => { await api.updateClient(id, client); await Promise.all([loadClients(), loadRevenue()]); });
+  const deleteClient = (id: string) => attempt(async () => { await api.deleteClient(id); await loadClients(); });
+  const addVisit = (visit: VisitInput) => attempt(async () => { await api.addVisit(visit); await loadClients(); });
+  const updateVisit = (id: string, visit: VisitInput) => attempt(async () => { await api.updateVisit(id, visit); await loadClients(); });
+  const deleteVisit = (id: string) => attempt(async () => { await api.deleteVisit(id); await loadClients(); });
+
   // ---- Accounts team and logins (Admin) -------------------------------------------------------------------------------
   const addAccountsLogin = (email: string) => attempt(async () => { await api.addAccountsLogin(email); await loadAccounts(); });
   const removeAccountsLogin = (email: string) => attempt(async () => { await api.removeAccountsLogin(email); await loadAccounts(); });
@@ -269,6 +305,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         revenueEntries,
         outstandingPayments,
         dailyUpdates,
+        clients,
+        visits,
         filters,
         selectedMonth,
         setSelectedMonth,
@@ -284,6 +322,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteStaff,
         updateDepartmentTarget,
         addDailyUpdate,
+        addClient,
+        updateClient,
+        deleteClient,
+        addVisit,
+        updateVisit,
+        deleteVisit,
         accountsLogins,
         accountsTeamLogins: accountsLogins.map(a => a.email),
         addAccountsLogin,

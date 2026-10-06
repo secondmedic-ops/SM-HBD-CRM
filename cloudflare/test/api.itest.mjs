@@ -189,6 +189,56 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('team sees own department\'s updates', (await call('staff', 'GET', '/api/v1/daily-updates')).body.map((u) => u.staffName).sort(), ['Sakshi', 'Supriya']);
   eq('accounts sees all updates', (await call('accounts', 'GET', '/api/v1/daily-updates')).body.length, 3);
 
+  // ---- Clients and visits --------------------------------------------------------------------------------------------
+  const cl1 = await call('staff', 'POST', '/api/v1/clients', { name: '  Vashi   Heart Clinic ', type: 'Corporate', category: 'Clinic',
+    contactPerson: 'Dr Rao', phone: '+91 98765-43210', email: 'Desk@Clinic.example', city: 'Navi Mumbai', pincode: '400703', staffId: nihal.id });
+  eq('team member adds a client, always as owner', [cl1.status, cl1.body?.name, cl1.body?.staffId, cl1.body?.dept, cl1.body?.phone, cl1.body?.status],
+    [201, 'Vashi Heart Clinic', supriya.id, 'AIROLI', '9876543210', 'Lead']);
+  eq('same phone typed differently: 409', (await call('other', 'POST', '/api/v1/clients', { name: 'Copy', phone: '09876543210' })).body?.message,
+    'This phone number is already on a client managed by Supriya.');
+  eq('client validation', (await call('staff', 'POST', '/api/v1/clients', { name: '', phone: '123', pincode: '12', email: 'x' })).body?.fieldErrors,
+    { name: 'must not be blank', phone: 'must be a 10-13 digit phone number', email: 'must be a well-formed email address', pincode: 'must be 6 digits' });
+  const cl2 = await call('other', 'POST', '/api/v1/clients', { name: 'Ranchi Diagnostics', type: 'Corporate' });
+  eq('other department client', cl2.status, 201);
+  const cl3 = await call('incharge', 'POST', '/api/v1/clients', { name: 'Airoli Corporate Park', staffId: sakshi.id });
+  eq('incharge adds a client for a team member', [cl3.status, cl3.body?.staffName], [201, 'Sakshi']);
+  eq('incharge cannot give a client to another department', (await call('incharge', 'POST', '/api/v1/clients', { name: 'X', staffId: nihal.id })).status, 403);
+  eq('team member sees only own clients', (await call('staff', 'GET', '/api/v1/clients')).body.map((x) => x.name), ['Vashi Heart Clinic']);
+  eq('incharge sees the department', (await call('incharge', 'GET', '/api/v1/clients')).body.map((x) => x.name), ['Airoli Corporate Park', 'Vashi Heart Clinic']);
+  eq('admin sees all clients', (await call('admin', 'GET', '/api/v1/clients')).body.length, 3);
+  eq('client search', (await call('admin', 'GET', '/api/v1/clients?q=ranchi')).body.map((x) => x.name), ['Ranchi Diagnostics']);
+  eq('someone else\'s client is not found', (await call('other', 'PUT', `/api/v1/clients/${cl1.body.id}`, { status: 'Active' })).status, 404);
+  eq('team member cannot hand a client over', (await call('staff', 'PUT', `/api/v1/clients/${cl1.body.id}`, { staffId: sakshi.id })).status, 403);
+  const ed = await call('staff', 'PUT', `/api/v1/clients/${cl1.body.id}`, { status: 'Active', notes: 'Cardiology OPD, 40 patients a day' });
+  eq('owner edits the client, phone kept', [ed.status, ed.body?.status, ed.body?.phone, ed.body?.city], [200, 'Active', '9876543210', 'Navi Mumbai']);
+
+  const vbad = await call('staff', 'POST', '/api/v1/visits', { clientId: cl1.body.id, date: todayIst(1), nextFollowUp: todayIst(-5) });
+  eq('visit validation', vbad.body?.fieldErrors, { date: 'cannot be in the future (put a future date in Next follow-up)', notes: 'write what happened (purpose or notes)',
+    nextFollowUp: 'cannot be before the visit' });
+  const v1 = await call('staff', 'POST', '/api/v1/visits', { clientId: cl1.body.id, date: todayIst(-1), kind: 'Meeting', purpose: 'Health camp proposal',
+    notes: 'Asked for corporate rates', nextFollowUp: todayIst(3) });
+  eq('visit logged', [v1.status, v1.body?.staffId, v1.body?.clientName, v1.body?.kind], [201, supriya.id, 'Vashi Heart Clinic', 'Meeting']);
+  eq('visit on someone else\'s client: 404', (await call('other', 'POST', '/api/v1/visits', { clientId: cl1.body.id, date: todayIst(), notes: 'x' })).status, 404);
+  eq('cannot log a visit as someone else', (await call('staff', 'POST', '/api/v1/visits', { clientId: cl1.body.id, date: todayIst(), notes: 'x', staffId: sakshi.id })).status, 403);
+  const v2 = await call('incharge', 'POST', '/api/v1/visits', { clientId: cl1.body.id, date: todayIst(), kind: 'Call', notes: 'Follow-up call' });
+  eq('incharge logs a call on a department client', [v2.status, v2.body?.staffName], [201, 'Manoj']);
+  const cls = (await call('staff', 'GET', '/api/v1/clients')).body[0] ?? {};
+  eq('client shows visits, last visit and next follow-up', [cls.visitCount, cls.lastVisit, cls.nextFollowUp ?? null], [2, todayIst(), null]);
+  eq('visits of a client', (await call('staff', 'GET', `/api/v1/visits?clientId=${cl1.body.id}`)).body.map((x) => x.kind), ['Call', 'Meeting']);
+  eq('other department sees none of these visits', (await call('other', 'GET', '/api/v1/visits')).body.length, 0);
+  eq('owner edits a visit', (await call('staff', 'PUT', `/api/v1/visits/${v2.body.id}`, { date: todayIst(), kind: 'Call', notes: 'Call back', nextFollowUp: todayIst(7) })).body?.nextFollowUp, todayIst(7));
+  eq('other department cannot delete it', (await call('other', 'DELETE', `/api/v1/visits/${v2.body.id}`)).status, 404);
+
+  // Revenue entry for a client: the client's name is used; a client the caller cannot see is refused.
+  const rcl = await call('staff', 'POST', '/api/v1/revenue', { date: D, clientId: cl1.body.id, client: 'typed name', type: 'Corporate', amount: 3000, paymentStatus: 'Paid' });
+  eq('revenue entry linked to a client', [rcl.status, rcl.body?.client, rcl.body?.clientId], [201, 'Vashi Heart Clinic', cl1.body.id]);
+  eq('revenue for someone else\'s client: 400', (await call('other', 'POST', '/api/v1/revenue', { date: D, clientId: cl1.body.id, client: 'x', type: 'Corporate', amount: 1, paymentStatus: 'Paid' })).body?.fieldErrors,
+    { clientId: 'is not one of your clients' });
+  eq('client with revenue cannot be deleted', (await call('staff', 'DELETE', `/api/v1/clients/${cl1.body.id}`)).status, 409);
+  eq('client without revenue is deleted with its visits', (await call('incharge', 'DELETE', `/api/v1/clients/${cl3.body.id}`)).status, 204);
+  eq('admin hands a client to another department', (await call('admin', 'PUT', `/api/v1/clients/${cl2.body.id}`, { staffId: sakshi.id })).body?.dept, 'AIROLI');
+  eq('previous owner no longer sees it', (await call('other', 'GET', '/api/v1/clients')).body.length, 0);
+
   // ---- Logins (Supabase Auth admin API, stand-in in the rehearsal) ---------------------------------------------------
   eq('non-admin cannot make logins', (await call('accounts', 'POST', '/api/v1/admin/logins', { email: 'ritu@rehearsal.test', password: 'longenough' })).status, 403);
   eq('login only for known emails', (await call('admin', 'POST', '/api/v1/admin/logins', { email: 'stranger@rehearsal.test', password: 'longenough' })).body?.fieldErrors,
@@ -204,8 +254,9 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   // ---- Audit and misc ---------------------------------------------------------------------------------------------
   const audits = await sql`select table_name, action, coalesce(before::text, '') || coalesce(after::text, '') as body from public.audit_log`;
   check('changes are audited', audits.some((a) => a.table_name === 'revenue_entries' && a.action === 'CREATE') && audits.some((a) => a.action === 'RECEIVE'));
-  check('no client names or emails in the audit log', !audits.some((a) => /Apollo|Fortis|Ranchi|rehearsal\.test|Ritu/.test(a.body)),
-    audits.filter((a) => /Apollo|Fortis|Ranchi|rehearsal\.test|Ritu/.test(a.body)).map((a) => a.body).join(' | '));
+  const PERSONAL = /Apollo|Fortis|Ranchi|Vashi|Airoli Corporate|98765|Dr Rao|Cardiology|Health camp|rehearsal\.test|Ritu/;
+  check('no client names, phones, notes or emails in the audit log', !audits.some((a) => PERSONAL.test(a.body)),
+    audits.filter((a) => PERSONAL.test(a.body)).map((a) => a.body).join(' | '));
   eq('unknown endpoint with login: 404', (await call('admin', 'GET', '/api/v1/nothing-here')).status, 404);
   eq('wrong method: 405', (await call('admin', 'DELETE', '/api/v1/revenue')).status, 405);
   eq('malformed JSON: 400', (await call('admin', 'POST', '/api/v1/staff', 'not json')).body?.message, 'Malformed JSON request');

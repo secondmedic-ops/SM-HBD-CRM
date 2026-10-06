@@ -42,15 +42,24 @@ if (secret.length) {
   console.error("Refused to commit secret files: " + secret.join(", ") + "\nThey were left out. Check .gitignore, then run SHIP.bat again.");
   process.exit(1);
 }
-if (out("git diff --cached --name-only")) run(`git commit -q -m "${msg.replace(/"/g, "'")}" -m "Shipped-With: ship"`);
-else console.log("Nothing new to commit - re-shipping current main.");
+const fresh = !!out("git diff --cached --name-only");
+if (fresh) run(`git commit -q -m "${msg.replace(/"/g, "'")}" -m "Shipped-With: ship"`);
 run("git push origin HEAD:main");
 
 const sha = out("git rev-parse HEAD");
+// Nothing new to push: start a NEW run of the same commit (a fixed secret, a retry). Looking the run up by commit
+// would find the old, finished run and report its result again.
+const before = fresh ? "" : out(`gh run list --workflow ship.yml --commit ${sha} --json databaseId --jq ".[].databaseId"`);
+if (!fresh) {
+  console.log("Nothing new to commit - starting a new run of " + sha.slice(0, 7) + ".");
+  run("gh workflow run ship.yml --ref main");
+}
+const known = new Set(before.split(/\s+/).filter(Boolean));
 console.log("\nWaiting for the pipeline to pick up " + sha.slice(0, 7) + " ...");
 let id = "";
 for (let i = 0; i < 30 && !id; i++) {
-  id = out(`gh run list --workflow ship.yml --commit ${sha} --json databaseId --jq ".[0].databaseId"`);
+  const ids = out(`gh run list --workflow ship.yml --commit ${sha} --json databaseId --jq ".[].databaseId"`).split(/\s+/).filter(Boolean);
+  id = ids.find((x) => !known.has(x)) || "";
   if (!id) sleep(4000);
 }
 if (!id) { console.error("Pipeline did not start. Open GitHub > Actions."); process.exit(1); }

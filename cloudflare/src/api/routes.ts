@@ -5,6 +5,7 @@
 import type { Role } from './auth';
 import type { Ctx } from './context';
 import { getAttachment } from '../services/attachments';
+import { createClient, createVisit, deleteClient, deleteVisit, listClients, listVisits, updateClient, updateVisit } from '../services/clients';
 import { addAccountsLogin, listAccountsLogins, removeAccountsLogin, setLogin } from '../services/logins';
 import { createOutstanding, createRevenue, deleteRevenue, listOutstanding, listRevenue, receiveOutstanding, updateRevenue } from '../services/revenue';
 import { createStaff, deleteStaff, listDepartments, listStaff, setDepartmentTarget, updateStaff } from '../services/staff';
@@ -53,6 +54,16 @@ export const ROUTES: Route[] = [
 
   { method: 'GET', path: '/api/v1/daily-updates', access: ALL, summary: 'Daily updates (own department for INCHARGE / STAFF; ?from&to)', handler: listUpdates },
   { method: 'POST', path: '/api/v1/daily-updates', access: ALL, status: 201, summary: 'Post a daily update', handler: createUpdate },
+
+  // Clients: STAFF their own, INCHARGE the department, ADMIN / ACCOUNTS all (services/clients.ts).
+  { method: 'GET', path: '/api/v1/clients', access: ALL, summary: 'Clients in scope (?q&status) with visit count, last visit, next follow-up', handler: listClients },
+  { method: 'POST', path: '/api/v1/clients', access: ALL, status: 201, summary: 'Add a client (owner: the caller, or staffId for incharge / admin)', handler: createClient },
+  { method: 'PUT', path: '/api/v1/clients/{id}', access: ALL, summary: 'Change a client (only the fields sent; staffId hands it over)', handler: updateClient },
+  { method: 'DELETE', path: '/api/v1/clients/{id}', access: ALL, status: 204, summary: 'Delete a client without revenue entries (visits go with it)', handler: deleteClient },
+  { method: 'GET', path: '/api/v1/visits', access: ALL, summary: 'Visits of clients in scope (?clientId&from&to)', handler: listVisits },
+  { method: 'POST', path: '/api/v1/visits', access: ALL, status: 201, summary: 'Log a visit / call / meeting with a client', handler: createVisit },
+  { method: 'PUT', path: '/api/v1/visits/{id}', access: ALL, summary: 'Change a visit', handler: updateVisit },
+  { method: 'DELETE', path: '/api/v1/visits/{id}', access: ALL, status: 204, summary: 'Delete a visit', handler: deleteVisit },
 
   { method: 'GET', path: '/api/v1/attachments/{id}', access: ALL, summary: 'A slip / screenshot image of an entry the caller may see', handler: getAttachment },
 

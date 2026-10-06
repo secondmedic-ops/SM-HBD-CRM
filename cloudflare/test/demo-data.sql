@@ -21,3 +21,19 @@ from generate_series(1, 14) g
 join lateral (select id, dept from public.staff where active order by name offset g % 10 limit 1) s on true;
 
 insert into public.accounts_logins (email) values ('accounts@secondmedic.com') on conflict do nothing;
+
+insert into public.clients (name, type, category, contact_person, phone, city, status, staff_id, dept)
+select v.name, v.type, v.category, v.contact, v.phone, v.city, v.status, s.id, s.dept
+from (values
+  ('Apollo Clinic Vashi', 'Corporate', 'Clinic', 'Dr Mehta', '9820011111', 'Navi Mumbai', 'Active', 'Supriya'),
+  ('Infosys Airoli Campus', 'Corporate', 'Corporate', 'HR desk', '9820022222', 'Navi Mumbai', 'Lead', 'Manoj'),
+  ('Ranchi City Hospital', 'Corporate', 'Hospital', 'Admin office', '9431033333', 'Ranchi', 'Active', 'Nihal'),
+  ('Gynoveda Wellness', 'Corporate', 'Corporate', 'Ops team', '9820044444', 'Mumbai', 'Active', 'Ranju')
+) as v(name, type, category, contact, phone, city, status, owner)
+join public.staff s on s.name = v.owner;
+
+insert into public.client_visits (client_id, staff_id, visit_date, kind, purpose, notes, next_follow_up)
+select c.id, c.staff_id, current_date - 3, 'Meeting', 'Health camp proposal', 'Asked for rates for 200 employees', current_date + 2
+from public.clients c;
+
+update public.revenue_entries r set client_id = c.id from public.clients c where r.client = c.name;

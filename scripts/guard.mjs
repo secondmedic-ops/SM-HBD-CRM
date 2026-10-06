@@ -9,7 +9,7 @@ const range = !before || zero.test(before) ? after : `${before}..${after}`;
 
 const reserved = [
   /^(backend|supabase|\.github|scripts|docs|cloudflare)\//,
-  /^(PROJECT\.md|CLAUDE\.md|SHIP\.bat|START-HERE\.bat|RUN-LOCAL-TEST\.bat|CLOUDFLARE-TOKEN\.bat|STAFF-LOGINS-KEY\.bat|server\.ts|\.gitattributes)$/,
+  /^(PROJECT\.md|CLAUDE\.md|SHIP\.bat|START-HERE\.bat|RUN-LOCAL-TEST\.bat|CLOUDFLARE-TOKEN\.bat|STAFF-LOGINS-KEY\.bat|DB-PASSWORD\.bat|server\.ts|\.gitattributes)$/,
   /^src\/(api\.ts|AuthGate\.tsx|main\.tsx|lib\/|context\/AppContext\.tsx)/,
 ];
 const generated = /^docs\/(openapi\.json|schema\.md)$/;

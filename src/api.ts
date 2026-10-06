@@ -8,7 +8,7 @@
  * Locally (npm run dev / RUN-LOCAL-TEST.bat) server.ts forwards /api/v1 to the Worker on :8787.
  */
 import { accessToken, supabase } from './lib/supabase';
-import type { DailyUpdate, Department, OutstandingPayment, RevenueEntry, Staff } from './types';
+import type { Client, ClientVisit, DailyUpdate, Department, OutstandingPayment, RevenueEntry, Staff } from './types';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -78,6 +78,35 @@ export interface RevenueInput {
   /** A new slip image (data URL, shrunk by src/lib/image.ts); leave out to keep the saved one. */
   slipImage?: string;
   removeSlip?: boolean;
+  /** A client from the Clients list (the API then uses that client's name). */
+  clientId?: string;
+}
+
+export interface ClientInput {
+  name?: string;
+  type?: Client['type'];
+  category?: string;
+  contactPerson?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  city?: string;
+  pincode?: string;
+  status?: Client['status'];
+  notes?: string;
+  /** Owner (incharge / admin only; a team member's clients are always their own). */
+  staffId?: string;
+}
+
+export interface VisitInput {
+  clientId?: string;
+  date: string;
+  kind: ClientVisit['kind'];
+  purpose: string;
+  notes: string;
+  nextFollowUp?: string;
+  /** Admin / accounts: who made the visit (default: the client's owner). */
+  staffId?: string;
 }
 
 export interface OutstandingInput {
@@ -130,6 +159,15 @@ export const api = {
   dailyUpdates: () => request<DailyUpdate[]>('/api/v1/daily-updates'),
   addDailyUpdate: (u: { date: string; staffId?: string; updateText: string; clientMetCount: number }) =>
     request<DailyUpdate>('/api/v1/daily-updates', { method: 'POST', body: json(u) }),
+
+  clients: () => request<Client[]>('/api/v1/clients'),
+  addClient: (c: ClientInput) => request<Client>('/api/v1/clients', { method: 'POST', body: json(c) }),
+  updateClient: (id: string, c: ClientInput) => request<Client>(`/api/v1/clients/${id}`, { method: 'PUT', body: json(c) }),
+  deleteClient: (id: string) => request<null>(`/api/v1/clients/${id}`, { method: 'DELETE' }),
+  visits: () => request<ClientVisit[]>('/api/v1/visits'),
+  addVisit: (v: VisitInput) => request<ClientVisit>('/api/v1/visits', { method: 'POST', body: json(v) }),
+  updateVisit: (id: string, v: VisitInput) => request<ClientVisit>(`/api/v1/visits/${id}`, { method: 'PUT', body: json(v) }),
+  deleteVisit: (id: string) => request<null>(`/api/v1/visits/${id}`, { method: 'DELETE' }),
 
   /** A slip / screenshot image as a data URL (only for entries the user may see). */
   attachment: (id: string) => request<{ id: string; dataUrl: string }>(`/api/v1/attachments/${id}`),
