@@ -198,12 +198,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (canSwitchRole) setCurrentStaffIdState(id);
   };
 
-  // The incharge view works with a team: the incharge and the staff reporting to them.
-  const inTeam = (staffId: string) => {
-    if (role !== 'Incharge') return true;
-    if (staffId === currentStaffId) return true;
-    return staffList.find(s => s.id === staffId)?.inchargeId === currentStaffId;
+  // The incharge view works with a team: the incharge and everyone below them in the reporting chain
+  // (an incharge may report to a senior incharge, who then sees both teams).
+  const teamOf = (id: string): Set<string> => {
+    const team = new Set<string>([id]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const s of staffList) if (s.inchargeId && team.has(s.inchargeId) && !team.has(s.id)) { team.add(s.id); grew = true; }
+    }
+    return team;
   };
+  const viewTeam = role === 'Incharge' && currentStaffId ? teamOf(currentStaffId) : null;
+  const inTeam = (staffId: string) => (viewTeam ? viewTeam.has(staffId) : true);
 
   // Incharge / staff views: only their own department (what the API sends such logins; this also makes Admin's
   // "View as" preview match).
@@ -212,7 +218,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const viewDepartments = ownView ? departments.filter(d => d.name === viewed!.dept) : departments;
   const viewStaff = ownView
     ? staffList.filter(s => s.dept === viewed!.dept || s.id === viewed!.id
-        || (role === 'Incharge' ? s.inchargeId === viewed!.id : s.id === viewed!.inchargeId))
+        || (role === 'Incharge' ? inTeam(s.id) : s.id === viewed!.inchargeId))
     : staffList;
 
   const setFilters = (newFilters: Partial<FilterState>) => setFiltersState(prev => ({ ...prev, ...newFilters }));

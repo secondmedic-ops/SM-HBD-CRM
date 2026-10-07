@@ -1,6 +1,6 @@
-// Who sees and changes which rows. ADMIN and ACCOUNTS: everything. INCHARGE: their own team (themselves and the staff
-// who report to them, staff.incharge_id). STAFF: their own rows (daily updates: their team, so the team's filling
-// status shows). A login with a role but no linked staff row (INCHARGE / STAFF set by hand) sees nothing, never
+// Who sees and changes which rows. ADMIN and ACCOUNTS: everything. INCHARGE: their own team (themselves and everyone
+// who reports to them, directly or through an incharge below them: staff.incharge_id down the chain). STAFF: their own
+// rows (daily updates: their team, so the team's filling status shows). A login with a role but no linked staff row (INCHARGE / STAFF set by hand) sees nothing, never
 // everything.
 import type { Ctx } from '../api/context';
 import type { Db } from '../db';
@@ -10,9 +10,11 @@ const NOBODY = '00000000-0000-0000-0000-000000000000';
 
 export const seesAll = (c: Ctx) => c.user.role === 'ADMIN' || c.user.role === 'ACCOUNTS';
 
-/** Ids of the incharge's team: the incharge and everyone reporting to them (as a SQL sub-select). */
+/** Ids of an incharge's team: the incharge and everyone below them in the reporting chain (as a SQL sub-select). */
 const teamOf = (c: Ctx, inchargeId: string | null) =>
-  c.sql`(select t.id from public.staff t where t.id = ${inchargeId ?? NOBODY}::uuid or t.incharge_id = ${inchargeId ?? NOBODY}::uuid)`;
+  c.sql`(with recursive t(id) as (select ${inchargeId ?? NOBODY}::uuid
+           union select s.id from public.staff s join t on s.incharge_id = t.id)
+         select id from t)`;
 
 /** Row filter for a table with a staff_id column (alias given). */
 export function rowScope(c: Ctx, alias: string) {
@@ -57,7 +59,7 @@ export async function staffOfRow(db: Db, id: string): Promise<StaffRef> {
 export function inMyScope(c: Ctx, s: { id: string; incharge_id: string | null }): boolean {
   if (seesAll(c)) return true;
   if (!c.user.staffId) return false;
-  if (c.user.role === 'INCHARGE') return s.id === c.user.staffId || s.incharge_id === c.user.staffId;
+  if (c.user.role === 'INCHARGE') return s.id === c.user.staffId || c.user.teamIds.includes(s.id);
   return s.id === c.user.staffId;
 }
 

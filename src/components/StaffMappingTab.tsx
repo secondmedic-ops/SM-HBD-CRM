@@ -32,6 +32,19 @@ export const StaffMappingTab: React.FC = () => {
   const [newIncharge, setNewIncharge] = useState('');
   // Incharges a team member can report to.
   const incharges = staffList.filter(s => s.role === 'Incharge');
+  // Who a person may report to: any incharge except themselves and anyone already below them (no loops).
+  const below = (id: string): Set<string> => {
+    const team = new Set<string>([id]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const s of staffList) if (s.inchargeId && team.has(s.inchargeId) && !team.has(s.id)) { team.add(s.id); grew = true; }
+    }
+    return team;
+  };
+  const reportChoices = (id: string) => {
+    const skip = below(id);
+    return incharges.filter(i => !skip.has(i.id));
+  };
 
   const [newEmail, setNewEmail] = useState('');
 
@@ -86,7 +99,7 @@ export const StaffMappingTab: React.FC = () => {
       designation: newDesignation,
       project: newProject,
       individualTarget: Number(newTarget) || 150000,
-      inchargeId: newRole === 'Team' && newIncharge ? newIncharge : undefined,
+      inchargeId: newIncharge || undefined,
     });
     if (!ok) return;
 
@@ -254,20 +267,16 @@ export const StaffMappingTab: React.FC = () => {
                     </select>
                   </td>
                   <td className="py-3 px-4">
-                    {stf.role === 'Team' ? (
-                      <select
-                        value={stf.inchargeId ?? ''}
-                        onChange={e => updateStaff(stf.id, { inchargeId: e.target.value })}
-                        className="bg-slate-50 border border-slate-200 px-2 py-1 w-full focus:outline-none"
-                      >
-                        <option value="">Nobody</option>
-                        {incharges.map(i => (
-                          <option key={i.id} value={i.id}>{i.name} ({i.dept})</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-slate-400">-</span>
-                    )}
+                    <select
+                      value={stf.inchargeId ?? ''}
+                      onChange={e => updateStaff(stf.id, { inchargeId: e.target.value })}
+                      className="bg-slate-50 border border-slate-200 px-2 py-1 w-full focus:outline-none"
+                    >
+                      <option value="">Nobody</option>
+                      {reportChoices(stf.id).map(i => (
+                        <option key={i.id} value={i.id}>{i.name} ({i.dept})</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="py-3 px-4">
                     <input
@@ -351,11 +360,12 @@ export const StaffMappingTab: React.FC = () => {
             <label className="block text-[11px] font-semibold text-slate-500 mb-1">Reports to</label>
             <select
               value={newIncharge}
-              disabled={newRole !== 'Team'}
+
               onChange={e => {
                 setNewIncharge(e.target.value);
                 const i = incharges.find(x => x.id === e.target.value);
-                if (i) setNewDept(i.dept);
+                // A team member works in their incharge's department; an incharge keeps the department chosen.
+                if (i && newRole === 'Team') setNewDept(i.dept);
               }}
               className="w-full bg-slate-50 border border-slate-200 px-3 py-2 text-xs focus:outline-none disabled:opacity-50"
             >

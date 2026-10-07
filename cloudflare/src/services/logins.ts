@@ -82,7 +82,7 @@ export async function setLogin(c: Ctx, body: unknown) {
   const [known] = await c.sql`
     select exists (select 1 from public.staff s where s.active and lower(s.email) = ${email}) as staff,
            exists (select 1 from public.staff s where s.active and lower(s.email) = ${email}
-                   and s.incharge_id = ${c.user.staffId ?? '00000000-0000-0000-0000-000000000000'}::uuid) as my_team,
+                   and s.id::text in ${c.sql(c.user.teamIds.filter((x) => x !== c.user.staffId).concat(['-']))}) as my_team,
            exists (select 1 from public.accounts_logins a where a.email = ${email}) as accounts,
            (select u.id::text from auth.users u where lower(u.email) = ${email} limit 1) as user_id`;
   // An incharge makes / resets logins only for the staff in their own team.

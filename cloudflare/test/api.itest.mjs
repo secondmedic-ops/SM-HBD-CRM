@@ -8,6 +8,7 @@ const USERS = {
   staff: '00000000-0000-4000-8000-000000000004', // Supriya, AIROLI team
   other: '00000000-0000-4000-8000-000000000005', // Nihal, MDSA team
   norole: '00000000-0000-4000-8000-000000000006',
+  head: '00000000-0000-4000-8000-000000000007', // Ranju, CORPORATE incharge; Manoj reports to her in one check
 };
 const email = (who) => `${who}@rehearsal.test`;
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -163,6 +164,23 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('incharge sees the team', listI.map((r) => r.client).sort(), ['Apollo Clinic', 'Fortis Vashi']);
   eq('other department sees none of AIROLI', (await call('other', 'GET', '/api/v1/revenue')).body.map((r) => r.client), ['Ranchi Hospital']);
   eq('accounts sees all', (await call('accounts', 'GET', '/api/v1/revenue')).body.length, 3);
+
+  // An incharge can report to a senior incharge, who then sees the whole chain below them.
+  const ranju = byName(staff0, 'Ranju');
+  await call('admin', 'PUT', `/api/v1/staff/${ranju.id}`, { email: email('head') });
+  eq('head sees only own team before', (await call('head', 'GET', '/api/v1/revenue')).body.length, 0);
+  const upM = await call('admin', 'PUT', `/api/v1/staff/${manoj.id}`, { inchargeId: ranju.id });
+  eq('incharge reports to a senior incharge, keeps own department', [upM.status, upM.body?.role, upM.body?.dept, upM.body?.inchargeName], [200, 'Incharge', 'AIROLI', 'Ranju']);
+  eq('senior incharge sees the chain below', (await call('head', 'GET', '/api/v1/revenue')).body.map((r) => r.client).sort(), ['Apollo Clinic', 'Fortis Vashi']);
+  eq('no loops in the reporting chain', (await call('admin', 'PUT', `/api/v1/staff/${ranju.id}`, { inchargeId: manoj.id })).body?.fieldErrors,
+    { inchargeId: 'reports to this person already (that would make a loop)' });
+  eq('nobody reports to themselves', (await call('admin', 'PUT', `/api/v1/staff/${ranju.id}`, { inchargeId: ranju.id })).status, 400);
+  eq('lower incharge does not see the senior one\'s rows', (await call('incharge', 'GET', '/api/v1/revenue')).body.length, 2);
+  const newInch = await call('admin', 'POST', '/api/v1/staff', { name: 'Deepa', role: 'Incharge', dept: 'BD', inchargeId: ranju.id });
+  eq('new incharge with a senior incharge', [newInch.status, newInch.body?.dept, newInch.body?.inchargeName], [201, 'BD', 'Ranju']);
+  await call('admin', 'DELETE', `/api/v1/staff/${newInch.body.id}`);
+  await call('admin', 'PUT', `/api/v1/staff/${manoj.id}`, { inchargeId: '' });
+  eq('chain removed again', (await call('head', 'GET', '/api/v1/revenue')).body.length, 0);
   eq('date filter', (await call('admin', 'GET', `/api/v1/revenue?from=${todayIst(-1)}`)).body.length, 0);
   eq('bad date filter: 400', (await call('admin', 'GET', '/api/v1/revenue?from=yesterday')).status, 400);
 

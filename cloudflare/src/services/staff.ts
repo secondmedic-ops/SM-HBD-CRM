@@ -1,5 +1,6 @@
 // Departments (monthly targets) and the staff list (Staff mapping / My team / Staff directory). Everyone may read the
-// team list. ADMIN changes anyone and sets who reports to which incharge (staff.incharge_id). An INCHARGE adds staff to
+// team list. ADMIN changes anyone and sets who reports to which incharge (staff.incharge_id): a team member reports to
+// an incharge, and an incharge may report to a senior incharge (no loops). An INCHARGE adds staff to
 // their own team and changes their team members' details (not their role, department or incharge). Work emails and
 // login status are shown to ADMIN for everyone and to an INCHARGE for their own team.
 import Big from 'big.js';
@@ -65,7 +66,7 @@ function staffJson(r: Record<string, any>, showPrivate: boolean) {
 
 /** Email and login status: ADMIN for everyone, an INCHARGE for themselves and their team. */
 const showsPrivate = (c: Ctx, r: Record<string, any>) =>
-  c.user.role === 'ADMIN' || (c.user.role === 'INCHARGE' && !!c.user.staffId && (r.id === c.user.staffId || r.incharge_id === c.user.staffId));
+  c.user.role === 'ADMIN' || (c.user.role === 'INCHARGE' && c.user.teamIds.includes(r.id));
 
 const selectStaff = (c: Ctx) => c.sql`
   select s.id::text, s.name, s.dept, s.role, s.designation, s.project, s.individual_target::text, s.email,
@@ -84,7 +85,7 @@ export async function listStaff(c: Ctx) {
   const me = c.user.staffId ?? none;
   const scope = c.user.role === 'ADMIN' || c.user.role === 'ACCOUNTS' ? sql``
     : c.user.role === 'INCHARGE'
-      ? sql`and (s.dept = ${c.user.dept ?? '-'} or s.id = ${me}::uuid or s.incharge_id = ${me}::uuid)`
+      ? sql`and (s.dept = ${c.user.dept ?? '-'} or s.id = ${me}::uuid or s.id::text in ${sql(c.user.teamIds.concat(['-']))})`
       : sql`and (s.dept = ${c.user.dept ?? '-'} or s.id = ${me}::uuid or s.id = ${c.user.inchargeId ?? none}::uuid)`;
   const rows = await sql`${selectStaff(c)} where s.active ${scope} order by d.sort_order, (s.role = 'Incharge') desc, s.name`;
   return rows.map((r) => staffJson(r, showsPrivate(c, r)));
@@ -152,10 +153,18 @@ async function assertDept(c: Ctx, dept: string | undefined) {
   if (!d) throw new ApiError(400, 'Validation failed', { dept: 'is not a department' });
 }
 
-/** The incharge a team member reports to: an active staff member with role Incharge (not the person themselves). */
+/**
+ * The incharge someone reports to: an active staff member with role Incharge, not the person themselves and not anyone
+ * who (directly or further down) reports to that person, so the chain never loops.
+ */
 async function loadIncharge(c: Ctx, id: string, self: string | null): Promise<{ id: string; dept: string }> {
   const [i] = await c.sql`select id::text, dept from public.staff where id = ${id}::uuid and active and role = 'Incharge'`;
   if (!i || id === self) throw new ApiError(400, 'Validation failed', { inchargeId: 'is not an incharge' });
+  if (self) {
+    const [loop] = await c.sql`with recursive t(id) as (select ${self}::uuid union select s.id from public.staff s join t on s.incharge_id = t.id)
+                               select 1 from t where id = ${id}::uuid`;
+    if (loop) throw new ApiError(400, 'Validation failed', { inchargeId: 'reports to this person already (that would make a loop)' });
+  }
   return i as unknown as { id: string; dept: string };
 }
 
@@ -182,10 +191,10 @@ export async function createStaff(c: Ctx, body: unknown) {
     v.dept = c.user.dept;
     v.inchargeId = c.user.staffId;
   } else {
-    if (v.role === 'Incharge') v.inchargeId = null;
     if (v.inchargeId) {
       const i = await loadIncharge(c, v.inchargeId, null);
-      v.dept ??= i.dept;
+      // A team member takes their incharge's department; an incharge keeps their own (they may report across departments).
+      if (v.role === 'Team') v.dept ??= i.dept;
     }
   }
   if (!v.dept) throw new ApiError(400, 'Validation failed', { dept: 'must not be blank' });
@@ -205,8 +214,8 @@ export async function createStaff(c: Ctx, body: unknown) {
 }
 
 /**
- * PUT /staff/{id} (only the fields sent). ADMIN: everything, incl. role and incharge (inchargeId '' = nobody); a person
- * who stops being an incharge leaves their team without an incharge. INCHARGE: name, designation, project, target and
+ * PUT /staff/{id} (only the fields sent). ADMIN: everything, incl. role and incharge (inchargeId '' = nobody; an incharge
+ * may report to a senior incharge); a person who stops being an incharge leaves their team without an incharge. INCHARGE: name, designation, project, target and
  * email of their own team members.
  */
 export async function updateStaff(c: Ctx, body: unknown) {
@@ -216,7 +225,7 @@ export async function updateStaff(c: Ctx, body: unknown) {
   if (!cur) throw notFound('Staff member', id);
   if (c.user.role === 'INCHARGE') {
     if (cur.id === c.user.staffId) throw forbidden('Only the admin can change an incharge\'s own row.');
-    const mine = !!c.user.staffId && cur.incharge_id === c.user.staffId;
+    const mine = c.user.teamIds.includes(cur.id);
     if (!mine) throw notFound('Staff member', id);
     const changes = (v.role !== undefined && v.role !== cur.role) || (v.dept !== undefined && v.dept !== cur.dept)
       || (v.inchargeId !== undefined && v.inchargeId !== cur.incharge_id);
@@ -224,10 +233,9 @@ export async function updateStaff(c: Ctx, body: unknown) {
     v.role = undefined; v.dept = undefined; v.inchargeId = undefined;
   }
   const role = v.role ?? cur.role;
-  if (role === 'Incharge' && (v.inchargeId || (v.inchargeId === undefined && cur.incharge_id))) v.inchargeId = null;
   if (v.inchargeId) {
     const i = await loadIncharge(c, v.inchargeId, id);
-    if (v.dept === undefined && body && (body as any).dept === undefined) v.dept = i.dept;
+    if (role === 'Team' && v.dept === undefined && body && (body as any).dept === undefined) v.dept = i.dept;
   }
   await assertDept(c, v.dept);
   await assertEmailFree(c, v.email, id);
@@ -265,7 +273,7 @@ export async function deleteStaff(c: Ctx) {
     const [before] = await tx`select id::text, dept, role, individual_target::text, email, incharge_id::text from public.staff
                               where id = ${id}::uuid and active for update`;
     if (!before) throw notFound('Staff member', id);
-    if (c.user.role === 'INCHARGE' && (!c.user.staffId || before.incharge_id !== c.user.staffId)) {
+    if (c.user.role === 'INCHARGE' && (before.id === c.user.staffId || !c.user.teamIds.includes(before.id))) {
       if (before.id === c.user.staffId) throw forbidden('Only the admin can remove an incharge.');
       throw notFound('Staff member', id);
     }

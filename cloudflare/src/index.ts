@@ -69,7 +69,7 @@ async function api(req: Request, env: Env, ctx: ExecutionContext): Promise<Respo
   const sql = connect(env);
   try {
     const user: User = off
-      ? { id: 'local-dev', email: null, role: 'ADMIN', staffId: null, staffName: null, dept: null, inchargeId: null, authMode: 'off' }
+      ? { id: 'local-dev', email: null, role: 'ADMIN', staffId: null, staffName: null, dept: null, inchargeId: null, teamIds: [], authMode: 'off' }
       : { ...who, ...(await accessOf(sql, who.id, who.email)), authMode: 'supabase' };
     const { route, params } = found;
     if (route.path === '/api/v1/me') {

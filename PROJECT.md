@@ -20,8 +20,8 @@ on free plans.
 - Roles (worked out per login in `cloudflare/src/api/auth.ts`, cached 60 s):
   - **ADMIN**: `public.user_roles` row (first admin: the SQL START-HERE.bat prints). Everything, incl. Staff mapping.
   - **ACCOUNTS**: email in Staff mapping > Accounts team logins. Sees and edits all departments, all amounts; no Staff mapping.
-  - **INCHARGE**: email on a staff row with role Incharge. Works with their **team** = themselves + the staff whose
-    `staff.incharge_id` points at them (entries, outstanding, clients, daily updates; may delete the team's entries).
+  - **INCHARGE**: email on a staff row with role Incharge. Works with their **team** = themselves + everyone below them
+    in the reporting chain (`staff.incharge_id`; an incharge may report to a senior incharge, no loops) (entries, outstanding, clients, daily updates; may delete the team's entries).
     My team tab: adds Team members to their own team, edits their name / designation / project / target / email and
     makes their logins. Role, department and who reports to whom are set by ADMIN in Staff mapping (Reports to).
   - **STAFF**: email on a staff row with role Team. Only their own entries, outstanding and clients (never cost or
