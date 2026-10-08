@@ -20,7 +20,10 @@
   },
 
   // Settings (not secret). The pipeline adds BUILD_SHA and SUPABASE_URL with --var.
-  "vars": {},
+  // TRACKER_URL: System Tracker, the standalone cross-project error/health collector (src/systemTracker.ts).
+  // TRACKER_KEY is NOT here — it's a secret, set once as the GitHub secret TRACKER_KEY (same value System
+  // Tracker itself uses): gh secret set TRACKER_KEY --repo secondmedic-ops/SM-HBD-CRM
+  "vars": { "TRACKER_URL": "https://system-tracker.secondmedic.workers.dev" },
   // Supabase Postgres through Hyperdrive. The pipeline (scripts/hyperdrive.mjs) creates / updates the Hyperdrive
   // config "sm-hbd-crm-db" from the GitHub secret SUPABASE_DB_URL and deploys with its real id; the id below is only
   // a stand-in for local runs, which use CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE instead.

@@ -84,14 +84,17 @@ jobs:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TRACKER_KEY: ${{ secrets.TRACKER_KEY }}
         run: |
           if [ -z "$SUPABASE_URL" ]; then echo "GitHub variable VITE_SUPABASE_URL is not set - run START-HERE.bat"; exit 1; fi
           node scripts/hyperdrive.mjs
+          # Optional Worker secrets: Supabase secret key (Staff mapping > Create login, STAFF-LOGINS-KEY.bat) and
+          # TRACKER_KEY (System Tracker reporting, src/systemTracker.ts, gh secret set TRACKER_KEY). Only the ones
+          # actually set end up in the secrets file.
+          umask 077
+          node -e 'const e = process.env, o = {}; for (const k of ["SUPABASE_SERVICE_ROLE_KEY","TRACKER_KEY"]) if (e[k]) o[k] = e[k]; process.stdout.write(JSON.stringify(o))' > "$RUNNER_TEMP/worker-secrets.json"
           SECRETS=()
-          # Optional Worker secret: Supabase secret key (Staff mapping > Create login), set once with STAFF-LOGINS-KEY.bat.
-          if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
-            umask 077
-            node -e 'const e = process.env, o = {}; for (const k of ["SUPABASE_SERVICE_ROLE_KEY"]) if (e[k]) o[k] = e[k]; process.stdout.write(JSON.stringify(o))' > "$RUNNER_TEMP/worker-secrets.json"
+          if [ "$(cat "$RUNNER_TEMP/worker-secrets.json")" != "{}" ]; then
             SECRETS=(--secrets-file "$RUNNER_TEMP/worker-secrets.json")
           fi
           cd cloudflare
@@ -104,10 +107,12 @@ jobs:
       - name: 7. Record - commit contracts, tag, deployments table, summary
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          TRACKER_KEY: ${{ secrets.TRACKER_KEY }}
         run: node scripts/record.mjs success
 
       - name: Record failure
         if: failure()
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          TRACKER_KEY: ${{ secrets.TRACKER_KEY }}
         run: node scripts/record.mjs failure || true

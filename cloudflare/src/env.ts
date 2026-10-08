@@ -19,4 +19,12 @@ export interface Env {
   EXPOSE_CONTRACT?: string;
   /** Local test only ("off"): no login, user is ADMIN. Refused unless DATABASE_URL points at this computer. */
   AUTH_MODE?: string;
+  /**
+   * System Tracker — the standalone, cross-project issue/health tracker (see src/systemTracker.ts).
+   * TRACKER_URL is a plain setting (set in wrangler.jsonc vars); TRACKER_KEY is a secret, set once as the
+   * GitHub secret TRACKER_KEY (same value System Tracker itself uses), uploaded by the pipeline like
+   * SUPABASE_SERVICE_ROLE_KEY above.
+   */
+  TRACKER_URL?: string;
+  TRACKER_KEY?: string;
 }

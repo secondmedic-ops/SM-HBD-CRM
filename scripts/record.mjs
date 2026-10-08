@@ -38,4 +38,36 @@ if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY,
     `### ${status === "success" ? "✅ Shipped" : "❌ Failed"} ${short}\n- ${subject}\n- Changed: ${areas}\n- Live: ${process.env.APP_URL}\n`);
 }
+
+// Best-effort: tell System Tracker (the standalone, cross-project error/health
+// collector) how this deploy went. Never fails the ship - a failure to reach
+// it must never affect the actual deploy outcome.
+if (process.env.TRACKER_KEY) {
+  try {
+    const TRACKER_URL = "https://system-tracker.secondmedic.workers.dev";
+    const body = status === "success"
+      ? { project: "sm-hbd-crm", component: "deploy", status: "up", detail: `${short}: ${subject}` }
+      : null;
+    if (body) {
+      await fetch(`${TRACKER_URL}/api/health`, {
+        method: "POST",
+        headers: { "x-tracker-key": process.env.TRACKER_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } else {
+      await fetch(`${TRACKER_URL}/api/issues`, {
+        method: "POST",
+        headers: { "x-tracker-key": process.env.TRACKER_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project: "sm-hbd-crm", component: "deploy", title: `Deploy failed: ${subject}`.slice(0, 120),
+          severity: "high", source: "auto", error_message: `Run: ${process.env.RUN_URL || ""}`,
+          context: { sha, areas }, created_by: "ship-pipeline",
+        }),
+      });
+    }
+  } catch (e) {
+    console.error("[system-tracker] failed to report deploy outcome:", e.message);
+  }
+}
+
 console.log(`Recorded ${status} for ${short}`);

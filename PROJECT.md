@@ -29,6 +29,11 @@ on free plans.
   - A login whose email is in none of these has no role and sees nothing.
 - Logins: Staff mapping > Create login (ADMIN) makes the Supabase user or sets a new password. It needs the Worker
   secret `SUPABASE_SERVICE_ROLE_KEY`, set once with `STAFF-LOGINS-KEY.bat`.
+- Errors and deploy health report to **System Tracker** (`secondmedic-ops`'s one shared error/health collector,
+  https://system-tracker.secondmedic.workers.dev — see `cloudflare/src/systemTracker.ts` and `scripts/record.mjs`).
+  Needs the GitHub secret `TRACKER_KEY` (same value System Tracker itself uses), set once:
+  `gh secret set TRACKER_KEY --repo secondmedic-ops/SM-HBD-CRM`. Until it's set, reporting is skipped (logged, never
+  fails a request or a deploy).
 - Sensitive fields kept out of `audit_log`: client names, staff names and emails, daily update text, images.
 - Images (payment slips, outstanding screenshots) are shrunk in the browser (`src/lib/image.ts`, about 100-300 KB) and
   kept in `public.attachments`; lists carry only the id, `GET /api/v1/attachments/{id}` checks who may see it.

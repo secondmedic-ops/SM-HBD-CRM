@@ -8,6 +8,7 @@ import { errorResponse, json, noContent, readJson, toResponse } from './api/http
 import { contract, match } from './api/routes';
 import { connect, schemaProblems, Sql } from './db';
 import { Env } from './env';
+import { reportIssue } from './systemTracker';
 
 export type { Env };
 
@@ -85,7 +86,12 @@ async function api(req: Request, env: Env, ctx: ExecutionContext): Promise<Respo
     if (route.status === 204) return noContent();
     return json(result, route.status ?? 200);
   } catch (e) {
-    return toResponse(e);
+    const res = toResponse(e);
+    if (res.status >= 500) {
+      const msg = String((e as Error)?.message ?? e);
+      ctx.waitUntil(reportIssue(env, { component: 'api', title: msg.slice(0, 120) || 'Unhandled API error', errorMessage: msg }));
+    }
+    return res;
   } finally {
     ctx.waitUntil(sql.end({ timeout: 2 }).catch(() => {}));
   }
@@ -98,7 +104,12 @@ export default {
       try {
         return await api(req, env, ctx);
       } catch (e) {
-        return toResponse(e);
+        const res = toResponse(e);
+        if (res.status >= 500) {
+          const msg = String((e as Error)?.message ?? e);
+          ctx.waitUntil(reportIssue(env, { component: 'api', title: msg.slice(0, 120) || 'Unhandled API error', errorMessage: msg }));
+        }
+        return res;
       }
     }
     return env.ASSETS.fetch(req);
