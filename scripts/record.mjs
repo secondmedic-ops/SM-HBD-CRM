@@ -46,7 +46,7 @@ if (process.env.TRACKER_KEY) {
   try {
     const TRACKER_URL = "https://system-tracker.secondmedic.workers.dev";
     const body = status === "success"
-      ? { project: "sm-hbd-crm", component: "deploy", status: "up", detail: `${short}: ${subject}` }
+      ? { project: "sm-hbd-crm", component: "deploy", status: "ok", detail: `${short}: ${subject}` }
       : null;
     if (body) {
       await fetch(`${TRACKER_URL}/api/health`, {

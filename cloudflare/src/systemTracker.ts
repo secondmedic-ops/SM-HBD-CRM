@@ -32,7 +32,7 @@ export function reportIssue(
 
 export function reportHealth(
   env: Env,
-  entry: { component: string; status: 'up' | 'down'; latencyMs?: number | null; detail?: string | null },
+  entry: { component: string; status: 'ok' | 'degraded' | 'down'; latencyMs?: number | null; detail?: string | null },
 ): Promise<void> {
   return send(env, '/api/health', {
     project: PROJECT,
