@@ -62,6 +62,7 @@ export const RevenueEntriesTab: React.FC = () => {
   const validateForm = () => {
     const errs: Record<string, string> = {};
     if (!client.trim()) errs.client = 'Client name is required';
+    if (!patientName.trim()) errs.patientName = 'Patient name is required';
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) errs.amount = 'Valid amount is required';
     // Team members do not enter cost (they never see it); the API keeps cost for them.
     if (role !== 'Staff' && (cost === '' || isNaN(Number(cost)) || Number(cost) < 0)) errs.cost = 'Valid cost is required';
@@ -242,16 +243,18 @@ export const RevenueEntriesTab: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="revenue-patient-name" className="block text-xs font-semibold text-slate-600 mb-1">Patient Name (Optional)</label>
+              <label htmlFor="revenue-patient-name" className="block text-xs font-semibold text-slate-600 mb-1">Patient Name *</label>
               <input
                 id="revenue-patient-name"
                 type="text"
+                required
                 maxLength={200}
                 placeholder="Enter patient name"
                 value={patientName}
                 onChange={e => setPatientName(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-sm px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#1b7a54]"
               />
+              {errors.patientName && <span className="text-[10px] text-rose-500 mt-0.5 block">{errors.patientName}</span>}
             </div>
 
             <div>

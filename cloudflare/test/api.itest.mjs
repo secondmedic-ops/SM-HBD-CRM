@@ -148,24 +148,28 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   check('staff entry: no cost in the answer', e1.body && !('cost' in e1.body), JSON.stringify(e1.body));
   const e2 = await call('incharge', 'POST', '/api/v1/revenue', { date: D, staffId: sakshi.id, client: 'Fortis Vashi', type: 'Corporate',
     amount: '20000.50', cost: 4000, isNewClient: true, paymentStatus: 'Partly paid', amountReceived: 5000, slipImage: PNG,
-    patientName: ' ', patientContactNumber: '' });
-  eq('blank patient details are optional', [e2.status, e2.body?.patientName ?? null, e2.body?.patientContactNumber ?? null], [201, null, null]);
+    patientName: 'Patient Example', patientContactNumber: '' });
+  eq('blank patient contact is optional', [e2.status, e2.body?.patientName, e2.body?.patientContactNumber ?? null], [201, 'Patient Example', null]);
   eq('incharge entry for own department', [e2.status, e2.body?.staffName, e2.body?.paymentStatus, e2.body?.amount, e2.body?.cost], [201, 'Sakshi', 'Partly paid', 20000.5, 4000]);
   check('slip saved as an image id', typeof e2.body?.slipId === 'string', JSON.stringify(e2.body));
-  eq('incharge cannot enter for another department', (await call('incharge', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'X', type: 'Individual', amount: 1, paymentStatus: 'Paid' })).status, 403);
-  const e3 = await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'Ranchi Hospital', type: 'Corporate', amount: 50000, cost: 10000, paymentStatus: 'Paid' });
+  eq('incharge cannot enter for another department', (await call('incharge', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'X', patientName: 'Patient Example', type: 'Individual', amount: 1, paymentStatus: 'Paid' })).status, 403);
+  const e3 = await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'Ranchi Hospital', patientName: 'Patient Example', type: 'Corporate', amount: 50000, cost: 10000, paymentStatus: 'Paid' });
   eq('admin entry fully paid', [e3.status, e3.body?.dept, e3.body?.amountReceived], [201, 'MDSA', 50000]);
-  eq('omitted patient details are optional', [e3.body?.patientName ?? null, e3.body?.patientContactNumber ?? null], [null, null]);
-  const patientInput = { date: D, staffId: nihal.id, client: 'Y', type: 'Individual', amount: 100, paymentStatus: 'Paid' };
+  eq('omitted patient contact is optional', [e3.body?.patientName, e3.body?.patientContactNumber ?? null], ['Patient Example', null]);
+  const patientInput = { date: D, staffId: nihal.id, client: 'Y', patientName: 'Patient Example', type: 'Individual', amount: 100, paymentStatus: 'Paid' };
+  for (const patientName of [undefined, null, '', '   ']) {
+    eq('patient name required on create', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, patientName })).body?.fieldErrors,
+      { patientName: 'must not be blank' });
+  }
   eq('invalid optional patient contact rejected', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, patientContactNumber: 'abc' })).body?.fieldErrors,
     { patientContactNumber: 'must be a 10-13 digit phone number' });
   eq('patient name length checked', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, patientName: 'P'.repeat(201) })).body?.fieldErrors,
     { patientName: 'size must be between 0 and 200' });
-  const v = await call('admin', 'POST', '/api/v1/revenue', { date: todayIst(3), staffId: nihal.id, client: ' ', type: 'Individual', amount: 0, paymentStatus: 'Paid' });
+  const v = await call('admin', 'POST', '/api/v1/revenue', { date: todayIst(3), staffId: nihal.id, client: ' ', patientName: 'Patient Example', type: 'Individual', amount: 0, paymentStatus: 'Paid' });
   eq('revenue validation', v.body?.fieldErrors, { date: 'cannot be in the future', client: 'must not be blank', amount: 'must be greater than 0' });
-  eq('partly paid needs a sum below the amount', (await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'Y', type: 'Individual', amount: 100, paymentStatus: 'Partly paid', amountReceived: 100 })).status, 400);
-  eq('unknown payment status: malformed', (await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'Y', type: 'Individual', amount: 100, paymentStatus: 'Maybe' })).body?.message, 'Malformed JSON request');
-  eq('not an image: 400', (await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'Y', type: 'Individual', amount: 100, paymentStatus: 'Paid', slipImage: 'data:text/html;base64,PGI+' })).status, 400);
+  eq('partly paid needs a sum below the amount', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, paymentStatus: 'Partly paid', amountReceived: 100 })).status, 400);
+  eq('unknown payment status: malformed', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, paymentStatus: 'Maybe' })).body?.message, 'Malformed JSON request');
+  eq('not an image: 400', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, slipImage: 'data:text/html;base64,PGI+' })).status, 400);
 
   const listS = (await call('staff', 'GET', '/api/v1/revenue')).body;
   eq('staff sees only own entries', listS.map((r) => r.client), ['Apollo Clinic']);
@@ -224,16 +228,20 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   const o1b = (await call('staff', 'GET', '/api/v1/outstanding')).body[0];
   eq('outstanding follows the edit', [o1b.amount, o1b.amountPaid, o1b.client], [12000, 4000, 'Apollo Clinic Vashi']);
   eq('received below collected: 400', (await call('staff', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, client: 'A', type: 'Individual', amount: 12000,
-    paymentStatus: 'Partly paid', amountReceived: 1000 })).status, 400);
-  eq('team member cannot edit someone else\'s entry', (await call('staff', 'PUT', `/api/v1/revenue/${e2.body.id}`, { date: D, client: 'A', type: 'Individual', amount: 1, paymentStatus: 'Paid' })).status, 403);
+    paymentStatus: 'Partly paid', amountReceived: 1000, patientName: 'Patient Example' })).status, 400);
+  eq('team member cannot edit someone else\'s entry', (await call('staff', 'PUT', `/api/v1/revenue/${e2.body.id}`, { date: D, client: 'A', patientName: 'Patient Example', type: 'Individual', amount: 1, paymentStatus: 'Paid' })).status, 403);
   const [costRow] = await sql`select cost::text from public.revenue_entries where id = ${e1.body.id}::uuid`;
   eq('staff never sets cost', costRow.cost, '0.00');
-  const paid = await call('admin', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, staffId: supriya.id, client: 'Apollo Clinic Vashi', type: 'Individual', amount: 12000, cost: 3000, paymentStatus: 'Paid' });
+  const paid = await call('admin', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, staffId: supriya.id, client: 'Apollo Clinic Vashi', patientName: 'Patient Updated', type: 'Individual', amount: 12000, cost: 3000, paymentStatus: 'Paid' });
   eq('admin marks it paid', [paid.body?.paymentStatus, paid.body?.cost], ['Paid', 3000]);
-  eq('omitted patient details preserved on edit', [paid.body?.patientName, paid.body?.patientContactNumber], ['Patient Updated', '9123456780']);
+  eq('omitted patient contact preserved on edit', [paid.body?.patientName, paid.body?.patientContactNumber], ['Patient Updated', '9123456780']);
+  for (const patientName of [undefined, null, '', '   ']) {
+    eq('patient name required on edit', (await call('staff', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, client: 'Apollo Clinic Vashi', type: 'Individual', amount: 12000,
+      paymentStatus: 'Paid', patientName })).body?.fieldErrors, { patientName: 'must not be blank' });
+  }
   const cleared = await call('staff', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, client: 'Apollo Clinic Vashi', type: 'Individual', amount: 12000,
-    paymentStatus: 'Paid', patientName: '', patientContactNumber: '  ' });
-  eq('patient details can be cleared', [cleared.status, cleared.body?.patientName ?? null, cleared.body?.patientContactNumber ?? null], [200, null, null]);
+    paymentStatus: 'Paid', patientName: 'Patient Updated', patientContactNumber: '  ' });
+  eq('patient contact can be cleared', [cleared.status, cleared.body?.patientName, cleared.body?.patientContactNumber ?? null], [200, 'Patient Updated', null]);
   eq('outstanding shows paid', (await call('staff', 'GET', '/api/v1/outstanding')).body[0]?.status, 'Paid');
 
   const man = await call('other', 'POST', '/api/v1/outstanding', { client: 'Old dues', staffId: supriya.id, amount: 7000, dueDate: todayIst(5), screenshot: PNG });
@@ -300,9 +308,9 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('other department cannot delete it', (await call('other', 'DELETE', `/api/v1/visits/${v2.body.id}`)).status, 404);
 
   // Revenue entry for a client: the client's name is used; a client the caller cannot see is refused.
-  const rcl = await call('staff', 'POST', '/api/v1/revenue', { date: D, clientId: cl1.body.id, client: 'typed name', type: 'Corporate', amount: 3000, paymentStatus: 'Paid' });
+  const rcl = await call('staff', 'POST', '/api/v1/revenue', { date: D, clientId: cl1.body.id, client: 'typed name', patientName: 'Patient Example', type: 'Corporate', amount: 3000, paymentStatus: 'Paid' });
   eq('revenue entry linked to a client', [rcl.status, rcl.body?.client, rcl.body?.clientId], [201, 'Vashi Heart Clinic', cl1.body.id]);
-  eq('revenue for someone else\'s client: 400', (await call('other', 'POST', '/api/v1/revenue', { date: D, clientId: cl1.body.id, client: 'x', type: 'Corporate', amount: 1, paymentStatus: 'Paid' })).body?.fieldErrors,
+  eq('revenue for someone else\'s client: 400', (await call('other', 'POST', '/api/v1/revenue', { date: D, clientId: cl1.body.id, client: 'x', patientName: 'Patient Example', type: 'Corporate', amount: 1, paymentStatus: 'Paid' })).body?.fieldErrors,
     { clientId: 'is not one of your clients' });
   eq('client with revenue cannot be deleted', (await call('staff', 'DELETE', `/api/v1/clients/${cl1.body.id}`)).status, 409);
   eq('client without revenue is deleted with its visits', (await call('incharge', 'DELETE', `/api/v1/clients/${cl3.body.id}`)).status, 204);

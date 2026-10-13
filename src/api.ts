@@ -69,7 +69,7 @@ export interface RevenueInput {
   date: string;
   staffId: string;
   client: string;
-  patientName?: string;
+  patientName: string;
   patientContactNumber?: string;
   type: RevenueEntry['type'];
   amount: number;

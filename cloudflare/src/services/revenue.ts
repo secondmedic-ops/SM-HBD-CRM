@@ -81,7 +81,7 @@ interface EntryInput {
   date: string;
   staffId: string | null;
   client: string;
-  patientName?: string | null;
+  patientName: string;
   patientContactNumber?: string | null;
   type: (typeof TYPES)[number];
   amount: Big;
@@ -116,6 +116,7 @@ function parseEntry(body: unknown): EntryInput {
   if (d && d < OLDEST) ch.fail('date', `cannot be before ${OLDEST}`);
   ch.notBlank('client', client);
   ch.maxLen('client', client, 200);
+  ch.notBlank('patientName', patientName);
   ch.maxLen('patientName', patientName, 200);
   ch.maxLen('patientContactNumber', patientContact, 40);
   if (patientContact && (!/^[+\d\s().-]+$/.test(patientContact) || !/^\d{10,13}$/.test(patientContactNumber || ''))) {
@@ -136,7 +137,7 @@ function parseEntry(body: unknown): EntryInput {
     amountReceived: received === null ? null : money(received), dueDate: due,
     slip: checkImage('slipImage', b.slipImage), removeSlip: bool(b.removeSlip) ?? false,
     clientId: str(b.clientId) || null,
-    patientName: b.patientName === undefined ? undefined : patientName,
+    patientName: patientName!,
     patientContactNumber: b.patientContactNumber === undefined ? undefined : patientContactNumber,
   };
 }
@@ -193,7 +194,7 @@ export async function createRevenue(c: Ctx, body: unknown) {
                                           due_date, slip_id, client_id, patient_name, patient_contact_number, created_by)
       values (${e.date}, ${staff.id}::uuid, ${staff.dept}, ${e.client}, ${e.type}, ${e.amount.toFixed(2)}, ${cost.toFixed(2)},
               ${e.isNewClient}, ${received.toFixed(2)}, ${e.dueDate}, ${slipId}::uuid, ${e.clientId}::uuid,
-              ${e.patientName ?? null}, ${e.patientContactNumber ?? null}, ${uidOf(c)}::uuid)
+              ${e.patientName}, ${e.patientContactNumber ?? null}, ${uidOf(c)}::uuid)
       returning id::text`;
     await saveOutstanding(tx, c, r.id, e, received, staff, null);
     await audit(tx, c.user.id, 'CREATE', 'revenue_entries', r.id, null,
@@ -229,7 +230,7 @@ export async function updateRevenue(c: Ctx, body: unknown) {
       update public.revenue_entries set entry_date = ${e.date}, staff_id = ${staff.id}::uuid, dept = ${staff.dept}, client = ${e.client},
         type = ${e.type}, amount = ${e.amount.toFixed(2)}, cost = ${cost.toFixed(2)}, is_new_client = ${e.isNewClient},
         amount_received = ${received.toFixed(2)}, due_date = ${e.dueDate}, slip_id = ${slipId}::uuid, client_id = ${e.clientId}::uuid,
-        patient_name = ${e.patientName === undefined ? tx('patient_name') : e.patientName},
+        patient_name = ${e.patientName},
         patient_contact_number = ${e.patientContactNumber === undefined ? tx('patient_contact_number') : e.patientContactNumber},
         updated_at = now()
       where id = ${id}::uuid`;
