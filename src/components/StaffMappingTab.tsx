@@ -460,7 +460,7 @@ export const StaffMappingTab: React.FC = () => {
       </div>
 
       <div className="text-[11px] text-slate-400 text-center pt-4">
-        Department targets (Airoli 6L, MDSA 7L, Corporate 6L, BD 6L, Campaign 6L = 31L) are used for department progress.
+        Department targets are the sum of the saved monthly staff targets. Update staff targets above to change department progress.
       </div>
     </div>
   );

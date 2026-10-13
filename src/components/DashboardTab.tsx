@@ -27,8 +27,20 @@ export const DashboardTab: React.FC = () => {
     inTeam,
   } = useApp();
 
+  const effectiveStaff = staffList.filter(s => {
+    if (role === 'Staff' && s.id !== currentStaffId) return false;
+    if (role === 'Incharge' && !inTeam(s.id)) return false;
+    if (filters.dept && filters.dept !== 'ALL' && s.dept !== filters.dept) return false;
+    if (filters.staffId && filters.staffId !== 'ALL' && s.id !== filters.staffId) return false;
+    if (filters.designation && filters.designation !== 'ALL' && s.designation !== filters.designation) return false;
+    if (filters.project && filters.project !== 'ALL' && s.project !== filters.project) return false;
+    return true;
+  });
+  const effectiveStaffIds = new Set(effectiveStaff.map(s => s.id));
+  const totalTarget = effectiveStaff.reduce((total, s) => total + s.individualTarget, 0);
+
   const effectiveRevenue = revenueEntries.filter(r => {
-    if (role === 'Staff' && r.staffId !== currentStaffId) return false;
+    if (!effectiveStaffIds.has(r.staffId)) return false;
     if (role === 'Incharge' && !inTeam(r.staffId)) return false;
     if (filters.dept && filters.dept !== 'ALL' && r.dept !== filters.dept) return false;
     if (filters.staffId && filters.staffId !== 'ALL' && r.staffId !== filters.staffId) return false;
@@ -43,13 +55,6 @@ export const DashboardTab: React.FC = () => {
   const totalRevenue = effectiveRevenue.reduce((acc, r) => acc + r.amount, 0);
   const totalCollected = effectiveRevenue.reduce((acc, r) => acc + r.amountReceived, 0);
   
-  const effectiveDepts = role === 'Incharge'
-    ? departments.filter(d => d.name === staffList.find(s => s.id === currentStaffId)?.dept)
-    : filters.dept && filters.dept !== 'ALL'
-    ? departments.filter(d => d.name === filters.dept)
-    : departments;
-
-  const totalTarget = effectiveDepts.reduce((acc, d) => acc + d.target, 0);
   const achievementPct = totalTarget > 0 ? Math.round((totalRevenue / totalTarget) * 100) : 0;
   
   const newClientsCount = effectiveRevenue.filter(r => r.isNewClient).length;
@@ -86,7 +91,9 @@ export const DashboardTab: React.FC = () => {
     { title: 'Outstanding', value: formatINR(totalOutstanding), icon: AlertCircle, accent: 'border-t-red-500', color: 'text-red-600' },
   ];
 
-  const deptRows = departments.map(d => {
+  const deptRows = departments.filter(d => !filters.dept || filters.dept === 'ALL' || d.name === filters.dept).map(dept => {
+    const d = { ...dept, target: effectiveStaff.filter(s => s.dept === dept.name)
+      .reduce((total, s) => total + s.individualTarget, 0) };
     const revs = effectiveRevenue.filter(r => r.dept === d.name);
     const rev = revs.reduce((acc, r) => acc + r.amount, 0);
     const cost = revs.reduce((acc, r) => acc + r.cost, 0);
@@ -95,18 +102,10 @@ export const DashboardTab: React.FC = () => {
     return { ...d, revenue: rev, cost, profit, achievement: ach };
   });
 
-  const deptTotalTarget = departments.reduce((acc, d) => acc + d.target, 0);
+  const deptTotalTarget = deptRows.reduce((acc, d) => acc + d.target, 0);
   const deptTotalRevenue = deptRows.reduce((acc, r) => acc + r.revenue, 0);
   const deptTotalCost = deptRows.reduce((acc, r) => acc + r.cost, 0);
   const deptTotalProfit = deptTotalRevenue - deptTotalCost;
-
-  const effectiveStaff = role === 'Staff'
-    ? staffList.filter(s => s.id === currentStaffId)
-    : role === 'Incharge'
-    ? staffList.filter(s => inTeam(s.id))
-    : filters.dept && filters.dept !== 'ALL'
-    ? staffList.filter(s => s.dept === filters.dept)
-    : staffList;
 
   const staffRows = effectiveStaff.map(stf => {
     const revs = effectiveRevenue.filter(r => r.staffId === stf.id);

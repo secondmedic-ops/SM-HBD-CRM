@@ -65,7 +65,7 @@ export const GlobalFilterBar: React.FC = () => {
         const rev = revs.reduce((acc, r) => acc + r.amount, 0);
         const cost = revs.reduce((acc, r) => acc + r.cost, 0);
         const profit = rev - cost;
-        const ach = Math.round((rev / d.target) * 100);
+        const ach = d.target > 0 ? Math.round((rev / d.target) * 100) : 0;
         return {
           Department: d.name,
           Target: d.target,
@@ -83,7 +83,7 @@ export const GlobalFilterBar: React.FC = () => {
         Department: 'TOTAL' as any,
         Target: totalTarget,
         Revenue: totalRev,
-        'Achievement %': `${Math.round((totalRev / totalTarget) * 100)}%`,
+        'Achievement %': `${totalTarget > 0 ? Math.round((totalRev / totalTarget) * 100) : 0}%`,
         Cost: totalCost,
         Profit: totalProfit,
       });

@@ -215,7 +215,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // "View as" preview match).
   const viewed = staffList.find(s => s.id === currentStaffId);
   const ownView = (role === 'Incharge' || role === 'Staff') && !!viewed;
-  const viewDepartments = ownView ? departments.filter(d => d.name === viewed!.dept) : departments;
+  // Department totals follow the saved individual targets, never the seeded department budgets.
+  const viewDepartments = (ownView ? departments.filter(d => d.name === viewed!.dept) : departments)
+    .map(d => ({ ...d, target: staffList.filter(s => s.dept === d.name
+      && (role !== 'Staff' || s.id === currentStaffId)
+      && (role !== 'Incharge' || inTeam(s.id)))
+      .reduce((total, s) => total + s.individualTarget, 0) }));
   const viewStaff = ownView
     ? staffList.filter(s => s.dept === viewed!.dept || s.id === viewed!.id
         || (role === 'Incharge' ? inTeam(s.id) : s.id === viewed!.inchargeId))
