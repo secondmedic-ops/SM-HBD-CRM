@@ -35,6 +35,8 @@ export interface RevenueEntry {
   staffName: string;
   dept: DepartmentName;
   client: string;
+  patientName?: string;
+  patientContactNumber?: string;
   type: RevenueType;
   amount: number;
   /** The API does not send cost to team members (Staff role); the app shows 0 for them. */

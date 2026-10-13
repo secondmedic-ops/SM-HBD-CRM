@@ -27,6 +27,8 @@ export const RevenueEntriesTab: React.FC = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [staffId, setStaffId] = useState(currentStaffId || staffList[0]?.id || '');
   const [client, setClient] = useState('');
+  const [patientName, setPatientName] = useState('');
+  const [patientContactNumber, setPatientContactNumber] = useState('');
   const [type, setType] = useState<RevenueType>('Individual');
   const [amount, setAmount] = useState('');
   const [cost, setCost] = useState('');
@@ -85,6 +87,8 @@ export const RevenueEntriesTab: React.FC = () => {
       date,
       staffId,
       client,
+      patientName: patientName.trim(),
+      patientContactNumber: patientContactNumber.trim(),
       clientId: linked?.id,
       type,
       amount: numAmount,
@@ -103,6 +107,8 @@ export const RevenueEntriesTab: React.FC = () => {
 
     setEditingId(null);
     setClient('');
+    setPatientName('');
+    setPatientContactNumber('');
     setAmount('');
     setCost('');
     setIsNewClient(false);
@@ -120,6 +126,8 @@ export const RevenueEntriesTab: React.FC = () => {
     setDate(entry.date);
     setStaffId(entry.staffId);
     setClient(entry.client);
+    setPatientName(entry.patientName || '');
+    setPatientContactNumber(entry.patientContactNumber || '');
     setType(entry.type);
     setAmount(String(entry.amount));
     setCost(String(entry.cost));
@@ -162,6 +170,8 @@ export const RevenueEntriesTab: React.FC = () => {
         <button
           onClick={() => {
             setEditingId(null);
+            setPatientName('');
+            setPatientContactNumber('');
             setShowForm(!showForm);
           }}
           className="flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#1b7a54] rounded-xl shadow-md hover:bg-[#156344] transition-all"
@@ -229,6 +239,32 @@ export const RevenueEntriesTab: React.FC = () => {
                 <span className="text-[10px] text-slate-500 mt-0.5 block">Linked to this client in Clients</span>
               )}
               {errors.client && <span className="text-[10px] text-rose-500 mt-0.5 block">{errors.client}</span>}
+            </div>
+
+            <div>
+              <label htmlFor="revenue-patient-name" className="block text-xs font-semibold text-slate-600 mb-1">Patient Name (Optional)</label>
+              <input
+                id="revenue-patient-name"
+                type="text"
+                maxLength={200}
+                placeholder="Enter patient name"
+                value={patientName}
+                onChange={e => setPatientName(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#1b7a54]"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="revenue-patient-contact" className="block text-xs font-semibold text-slate-600 mb-1">Patient Contact Number (Optional)</label>
+              <input
+                id="revenue-patient-contact"
+                type="tel"
+                maxLength={40}
+                placeholder="Enter patient contact number"
+                value={patientContactNumber}
+                onChange={e => setPatientContactNumber(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-sm px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-[#1b7a54]"
+              />
             </div>
 
             <div>
@@ -379,6 +415,7 @@ export const RevenueEntriesTab: React.FC = () => {
                   <th className="py-3.5 px-6">Date</th>
                   <th className="py-3.5 px-6">Staff</th>
                   <th className="py-3.5 px-6">Client</th>
+                  <th className="py-3.5 px-6">Patient</th>
                   <th className="py-3.5 px-6">Type</th>
                   <th className="py-3.5 px-6">Amount</th>
                   {role !== 'Staff' && <th className="py-3.5 px-6">Cost</th>}
@@ -425,6 +462,10 @@ export const RevenueEntriesTab: React.FC = () => {
                             New Client
                           </span>
                         )}
+                      </td>
+                      <td className="py-4 px-6 text-slate-600 text-xs">
+                        <div>{entry.patientName || '-'}</div>
+                        {entry.patientContactNumber && <div className="mt-1">{entry.patientContactNumber}</div>}
                       </td>
                       <td className="py-4 px-6 text-slate-600 text-xs">{entry.type}</td>
                       <td className="py-4 px-6 font-mono tabular-nums font-bold text-slate-900">{formatINR(entry.amount)}</td>

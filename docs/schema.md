@@ -132,6 +132,8 @@
 | created_at | timestamp with time zone | NO |
 | updated_at | timestamp with time zone | NO |
 | client_id | uuid | YES |
+| patient_name | character varying | YES |
+| patient_contact_number | character varying | YES |
 
 ## staff
 | column | type | nullable |

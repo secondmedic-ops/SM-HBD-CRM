@@ -53,7 +53,7 @@ export const SCHEMA: Record<string, string[]> = {
   staff: ['id', 'name', 'dept', 'role', 'designation', 'project', 'individual_target', 'email', 'active', 'incharge_id', 'created_at', 'updated_at'],
   attachments: ['id', 'mime', 'data', 'bytes', 'created_by', 'created_at'],
   revenue_entries: ['id', 'entry_date', 'staff_id', 'dept', 'client', 'type', 'amount', 'cost', 'is_new_client', 'amount_received',
-    'due_date', 'slip_id', 'client_id', 'created_by', 'created_at', 'updated_at'],
+    'due_date', 'slip_id', 'client_id', 'patient_name', 'patient_contact_number', 'created_by', 'created_at', 'updated_at'],
   clients: ['id', 'name', 'type', 'category', 'contact_person', 'phone', 'email', 'address', 'city', 'pincode', 'status', 'notes',
     'staff_id', 'dept', 'created_by', 'created_at', 'updated_at'],
   client_visits: ['id', 'client_id', 'staff_id', 'visit_date', 'kind', 'purpose', 'notes', 'next_follow_up', 'created_by',

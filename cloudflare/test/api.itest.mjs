@@ -142,16 +142,25 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   // ---- Revenue entries ------------------------------------------------------------------------------------------
   const D = todayIst(-2);
   const e1 = await call('staff', 'POST', '/api/v1/revenue', { date: D, staffId: sakshi.id, client: 'Apollo Clinic', type: 'Individual',
-    amount: 10000, cost: 9999, paymentStatus: 'Outstanding', dueDate: todayIst(10) });
+    amount: 10000, cost: 9999, paymentStatus: 'Outstanding', dueDate: todayIst(10), patientName: '  Patient   Example ', patientContactNumber: '+91 91234-56789' });
+  eq('patient details saved and normalized', [e1.body?.patientName, e1.body?.patientContactNumber], ['Patient Example', '9123456789']);
   eq('staff entry is always their own', [e1.status, e1.body?.staffId, e1.body?.paymentStatus, e1.body?.amountReceived], [201, supriya.id, 'Outstanding', 0]);
   check('staff entry: no cost in the answer', e1.body && !('cost' in e1.body), JSON.stringify(e1.body));
   const e2 = await call('incharge', 'POST', '/api/v1/revenue', { date: D, staffId: sakshi.id, client: 'Fortis Vashi', type: 'Corporate',
-    amount: '20000.50', cost: 4000, isNewClient: true, paymentStatus: 'Partly paid', amountReceived: 5000, slipImage: PNG });
+    amount: '20000.50', cost: 4000, isNewClient: true, paymentStatus: 'Partly paid', amountReceived: 5000, slipImage: PNG,
+    patientName: ' ', patientContactNumber: '' });
+  eq('blank patient details are optional', [e2.status, e2.body?.patientName ?? null, e2.body?.patientContactNumber ?? null], [201, null, null]);
   eq('incharge entry for own department', [e2.status, e2.body?.staffName, e2.body?.paymentStatus, e2.body?.amount, e2.body?.cost], [201, 'Sakshi', 'Partly paid', 20000.5, 4000]);
   check('slip saved as an image id', typeof e2.body?.slipId === 'string', JSON.stringify(e2.body));
   eq('incharge cannot enter for another department', (await call('incharge', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'X', type: 'Individual', amount: 1, paymentStatus: 'Paid' })).status, 403);
   const e3 = await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'Ranchi Hospital', type: 'Corporate', amount: 50000, cost: 10000, paymentStatus: 'Paid' });
   eq('admin entry fully paid', [e3.status, e3.body?.dept, e3.body?.amountReceived], [201, 'MDSA', 50000]);
+  eq('omitted patient details are optional', [e3.body?.patientName ?? null, e3.body?.patientContactNumber ?? null], [null, null]);
+  const patientInput = { date: D, staffId: nihal.id, client: 'Y', type: 'Individual', amount: 100, paymentStatus: 'Paid' };
+  eq('invalid optional patient contact rejected', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, patientContactNumber: 'abc' })).body?.fieldErrors,
+    { patientContactNumber: 'must be a 10-13 digit phone number' });
+  eq('patient name length checked', (await call('admin', 'POST', '/api/v1/revenue', { ...patientInput, patientName: 'P'.repeat(201) })).body?.fieldErrors,
+    { patientName: 'size must be between 0 and 200' });
   const v = await call('admin', 'POST', '/api/v1/revenue', { date: todayIst(3), staffId: nihal.id, client: ' ', type: 'Individual', amount: 0, paymentStatus: 'Paid' });
   eq('revenue validation', v.body?.fieldErrors, { date: 'cannot be in the future', client: 'must not be blank', amount: 'must be greater than 0' });
   eq('partly paid needs a sum below the amount', (await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: nihal.id, client: 'Y', type: 'Individual', amount: 100, paymentStatus: 'Partly paid', amountReceived: 100 })).status, 400);
@@ -160,6 +169,7 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
 
   const listS = (await call('staff', 'GET', '/api/v1/revenue')).body;
   eq('staff sees only own entries', listS.map((r) => r.client), ['Apollo Clinic']);
+  eq('patient details survive reload', [listS[0]?.patientName, listS[0]?.patientContactNumber], ['Patient Example', '9123456789']);
   const listI = (await call('incharge', 'GET', '/api/v1/revenue')).body;
   eq('incharge sees the team', listI.map((r) => r.client).sort(), ['Apollo Clinic', 'Fortis Vashi']);
   eq('other department sees none of AIROLI', (await call('other', 'GET', '/api/v1/revenue')).body.map((r) => r.client), ['Ranchi Hospital']);
@@ -208,7 +218,8 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
 
   // Edit the entry: amount up to 12000, received stays 4000 (collected on the outstanding).
   const up = await call('staff', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, client: 'Apollo Clinic Vashi', type: 'Individual', amount: 12000, cost: 1,
-    paymentStatus: 'Partly paid', amountReceived: 4000 });
+    paymentStatus: 'Partly paid', amountReceived: 4000, patientName: 'Patient Updated', patientContactNumber: '09123456780' });
+  eq('patient details editable', [up.body?.patientName, up.body?.patientContactNumber], ['Patient Updated', '9123456780']);
   eq('staff edits own entry', [up.status, up.body?.amount, up.body?.amountReceived], [200, 12000, 4000]);
   const o1b = (await call('staff', 'GET', '/api/v1/outstanding')).body[0];
   eq('outstanding follows the edit', [o1b.amount, o1b.amountPaid, o1b.client], [12000, 4000, 'Apollo Clinic Vashi']);
@@ -219,6 +230,10 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('staff never sets cost', costRow.cost, '0.00');
   const paid = await call('admin', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, staffId: supriya.id, client: 'Apollo Clinic Vashi', type: 'Individual', amount: 12000, cost: 3000, paymentStatus: 'Paid' });
   eq('admin marks it paid', [paid.body?.paymentStatus, paid.body?.cost], ['Paid', 3000]);
+  eq('omitted patient details preserved on edit', [paid.body?.patientName, paid.body?.patientContactNumber], ['Patient Updated', '9123456780']);
+  const cleared = await call('staff', 'PUT', `/api/v1/revenue/${e1.body.id}`, { date: D, client: 'Apollo Clinic Vashi', type: 'Individual', amount: 12000,
+    paymentStatus: 'Paid', patientName: '', patientContactNumber: '  ' });
+  eq('patient details can be cleared', [cleared.status, cleared.body?.patientName ?? null, cleared.body?.patientContactNumber ?? null], [200, null, null]);
   eq('outstanding shows paid', (await call('staff', 'GET', '/api/v1/outstanding')).body[0]?.status, 'Paid');
 
   const man = await call('other', 'POST', '/api/v1/outstanding', { client: 'Old dues', staffId: supriya.id, amount: 7000, dueDate: todayIst(5), screenshot: PNG });
@@ -309,7 +324,7 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   // ---- Audit and misc ---------------------------------------------------------------------------------------------
   const audits = await sql`select table_name, action, coalesce(before::text, '') || coalesce(after::text, '') as body from public.audit_log`;
   check('changes are audited', audits.some((a) => a.table_name === 'revenue_entries' && a.action === 'CREATE') && audits.some((a) => a.action === 'RECEIVE'));
-  const PERSONAL = /Apollo|Fortis|Ranchi|Vashi|Airoli Corporate|98765|Dr Rao|Cardiology|Health camp|rehearsal\.test|Ritu/;
+  const PERSONAL = /Apollo|Fortis|Ranchi|Vashi|Airoli Corporate|98765|Dr Rao|Cardiology|Health camp|rehearsal\.test|Ritu|Patient Example|Patient Updated|912345678/;
   check('no client names, phones, notes or emails in the audit log', !audits.some((a) => PERSONAL.test(a.body)),
     audits.filter((a) => PERSONAL.test(a.body)).map((a) => a.body).join(' | '));
   eq('unknown endpoint with login: 404', (await call('admin', 'GET', '/api/v1/nothing-here')).status, 404);

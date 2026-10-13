@@ -159,7 +159,7 @@
         }
       },
       "post": {
-        "summary": "New revenue entry (+ outstanding row when not fully paid)",
+        "summary": "New revenue entry (optional patientName / patientContactNumber; outstanding row when not fully paid)",
         "x-access": [
           "ADMIN",
           "ACCOUNTS",
@@ -175,7 +175,7 @@
     },
     "/api/v1/revenue/{id}": {
       "put": {
-        "summary": "Change a revenue entry (its outstanding row follows)",
+        "summary": "Change a revenue entry (its outstanding row follows; omitted patient fields stay, blank clears)",
         "x-access": [
           "ADMIN",
           "ACCOUNTS",

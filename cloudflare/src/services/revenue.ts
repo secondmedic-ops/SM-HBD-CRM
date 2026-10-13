@@ -12,7 +12,7 @@ import { outstandingFor, PAYMENT_STATUSES, receive, receivedFor, statusOf } from
 import { audit } from './audit';
 import { checkImage, deleteImages, saveImage } from './attachments';
 import { assertMayActFor, loadStaff, ownStaffId, rowScope, staffOfRow } from './scope';
-import { visibleClient } from './clients';
+import { normalizePhone, visibleClient } from './clients';
 
 const TYPES = ['Individual', 'Corporate'] as const;
 const OLDEST = '2020-01-01';
@@ -22,7 +22,8 @@ const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v === null ||
 
 const ENTRY_COLUMNS = (c: Ctx) => c.sql`
   r.id::text, r.entry_date, r.staff_id::text, s.name as staff_name, r.dept, r.client, r.type, r.amount::text,
-  r.cost::text, r.is_new_client, r.amount_received::text, r.due_date, r.slip_id::text, r.client_id::text, r.created_at`;
+  r.cost::text, r.is_new_client, r.amount_received::text, r.due_date, r.slip_id::text, r.client_id::text,
+  r.patient_name, r.patient_contact_number, r.created_at`;
 
 /** One entry as the screens use it. STAFF get no cost (profit stays with incharges, accounts and admin). */
 function entryJson(c: Ctx, r: Record<string, any>) {
@@ -31,6 +32,7 @@ function entryJson(c: Ctx, r: Record<string, any>) {
     amount: n(r.amount), cost: c.user.role === 'STAFF' ? null : n(r.cost), isNewClient: r.is_new_client,
     paymentStatus: statusOf(d0(r.amount), d0(r.amount_received)), amountReceived: n(r.amount_received), dueDate: r.due_date,
     slipId: r.slip_id, clientId: r.client_id, createdAt: iso(r.created_at),
+    patientName: r.patient_name, patientContactNumber: r.patient_contact_number,
   };
 }
 
@@ -79,6 +81,8 @@ interface EntryInput {
   date: string;
   staffId: string | null;
   client: string;
+  patientName?: string | null;
+  patientContactNumber?: string | null;
   type: (typeof TYPES)[number];
   amount: Big;
   cost: Big | null;
@@ -97,6 +101,9 @@ function parseEntry(body: unknown): EntryInput {
   const ch = new Check();
   const d = date(b.date);
   const client = str(b.client);
+  const patientName = str(b.patientName)?.trim().replace(/\s+/g, ' ') || null;
+  const patientContact = str(b.patientContactNumber)?.trim() || null;
+  const patientContactNumber = normalizePhone(patientContact);
   const type = oneOf(b.type, TYPES);
   const amount = decimal(b.amount);
   const cost = decimal(b.cost);
@@ -109,6 +116,11 @@ function parseEntry(body: unknown): EntryInput {
   if (d && d < OLDEST) ch.fail('date', `cannot be before ${OLDEST}`);
   ch.notBlank('client', client);
   ch.maxLen('client', client, 200);
+  ch.maxLen('patientName', patientName, 200);
+  ch.maxLen('patientContactNumber', patientContact, 40);
+  if (patientContact && (!/^[+\d\s().-]+$/.test(patientContact) || !/^\d{10,13}$/.test(patientContactNumber || ''))) {
+    ch.fail('patientContactNumber', 'must be a 10-13 digit phone number');
+  }
   ch.notNull('type', type);
   ch.notNull('amount', amount);
   if (amount && amount.lte(0)) ch.fail('amount', 'must be greater than 0');
@@ -124,10 +136,12 @@ function parseEntry(body: unknown): EntryInput {
     amountReceived: received === null ? null : money(received), dueDate: due,
     slip: checkImage('slipImage', b.slipImage), removeSlip: bool(b.removeSlip) ?? false,
     clientId: str(b.clientId) || null,
+    patientName: b.patientName === undefined ? undefined : patientName,
+    patientContactNumber: b.patientContactNumber === undefined ? undefined : patientContactNumber,
   };
 }
 
-/** Audit snapshot: amounts and status, never the client name or the image. */
+/** Audit snapshot: amounts and status, never client/patient names, contact numbers or images. */
 const auditEntry = (e: { dept: string; type: string; amount: Big | string; cost: Big | string; received: Big | string; date: string }) => ({
   date: e.date, dept: e.dept, type: e.type, amount: Number(String(e.amount)), cost: Number(String(e.cost)),
   amountReceived: Number(String(e.received)), status: statusOf(new Big(String(e.amount)), new Big(String(e.received))),
@@ -176,9 +190,10 @@ export async function createRevenue(c: Ctx, body: unknown) {
     const slipId = e.slip ? await saveImage(tx, c.user.id, e.slip) : null;
     const [r] = await tx`
       insert into public.revenue_entries (entry_date, staff_id, dept, client, type, amount, cost, is_new_client, amount_received,
-                                          due_date, slip_id, client_id, created_by)
+                                          due_date, slip_id, client_id, patient_name, patient_contact_number, created_by)
       values (${e.date}, ${staff.id}::uuid, ${staff.dept}, ${e.client}, ${e.type}, ${e.amount.toFixed(2)}, ${cost.toFixed(2)},
-              ${e.isNewClient}, ${received.toFixed(2)}, ${e.dueDate}, ${slipId}::uuid, ${e.clientId}::uuid, ${uidOf(c)}::uuid)
+              ${e.isNewClient}, ${received.toFixed(2)}, ${e.dueDate}, ${slipId}::uuid, ${e.clientId}::uuid,
+              ${e.patientName ?? null}, ${e.patientContactNumber ?? null}, ${uidOf(c)}::uuid)
       returning id::text`;
     await saveOutstanding(tx, c, r.id, e, received, staff, null);
     await audit(tx, c.user.id, 'CREATE', 'revenue_entries', r.id, null,
@@ -214,6 +229,8 @@ export async function updateRevenue(c: Ctx, body: unknown) {
       update public.revenue_entries set entry_date = ${e.date}, staff_id = ${staff.id}::uuid, dept = ${staff.dept}, client = ${e.client},
         type = ${e.type}, amount = ${e.amount.toFixed(2)}, cost = ${cost.toFixed(2)}, is_new_client = ${e.isNewClient},
         amount_received = ${received.toFixed(2)}, due_date = ${e.dueDate}, slip_id = ${slipId}::uuid, client_id = ${e.clientId}::uuid,
+        patient_name = ${e.patientName === undefined ? tx('patient_name') : e.patientName},
+        patient_contact_number = ${e.patientContactNumber === undefined ? tx('patient_contact_number') : e.patientContactNumber},
         updated_at = now()
       where id = ${id}::uuid`;
     await saveOutstanding(tx, c, id, e, received, staff, prev);

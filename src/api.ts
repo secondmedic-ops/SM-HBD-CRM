@@ -69,6 +69,8 @@ export interface RevenueInput {
   date: string;
   staffId: string;
   client: string;
+  patientName?: string;
+  patientContactNumber?: string;
   type: RevenueEntry['type'];
   amount: number;
   /** Left out by team members (they never see cost). */

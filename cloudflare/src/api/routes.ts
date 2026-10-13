@@ -44,8 +44,8 @@ export const ROUTES: Route[] = [
   { method: 'DELETE', path: '/api/v1/staff/{id}', access: ['ADMIN', 'INCHARGE'], status: 204, summary: 'Remove a staff member (past entries stay; INCHARGE: own team)', handler: deleteStaff },
 
   { method: 'GET', path: '/api/v1/revenue', access: ALL, summary: 'Revenue entries in scope (?from&to); no cost for STAFF', handler: listRevenue },
-  { method: 'POST', path: '/api/v1/revenue', access: ALL, status: 201, summary: 'New revenue entry (+ outstanding row when not fully paid)', handler: createRevenue },
-  { method: 'PUT', path: '/api/v1/revenue/{id}', access: ALL, summary: 'Change a revenue entry (its outstanding row follows)', handler: updateRevenue },
+  { method: 'POST', path: '/api/v1/revenue', access: ALL, status: 201, summary: 'New revenue entry (optional patientName / patientContactNumber; outstanding row when not fully paid)', handler: createRevenue },
+  { method: 'PUT', path: '/api/v1/revenue/{id}', access: ALL, summary: 'Change a revenue entry (its outstanding row follows; omitted patient fields stay, blank clears)', handler: updateRevenue },
   { method: 'DELETE', path: '/api/v1/revenue/{id}', access: ['ADMIN', 'ACCOUNTS', 'INCHARGE'], status: 204, summary: 'Delete a revenue entry and its outstanding row', handler: deleteRevenue },
 
   { method: 'GET', path: '/api/v1/outstanding', access: ALL, summary: 'Outstanding payments in scope', handler: listOutstanding },
