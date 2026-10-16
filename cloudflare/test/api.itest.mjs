@@ -98,6 +98,34 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('admin sets BD target', (await call('admin', 'PUT', '/api/v1/departments/BD', { target: 650000 })).body?.target, 650000);
   eq('unknown department: 404', (await call('admin', 'PUT', '/api/v1/departments/XYZ', { target: 1 })).status, 404);
 
+  eq('no login cannot add department', (await call(null, 'POST', '/api/v1/departments', { name: 'Diagnostics' })).status, 401);
+  for (const who of ['staff', 'incharge', 'accounts', 'norole']) {
+    eq(`${who} cannot add department`, (await call(who, 'POST', '/api/v1/departments', { name: 'Diagnostics' })).status, 403);
+  }
+  for (const name of [undefined, '', '   ']) {
+    eq('blank department name rejected', (await call('admin', 'POST', '/api/v1/departments', { name })).body?.fieldErrors, { name: 'must not be blank' });
+  }
+  eq('long department name rejected', (await call('admin', 'POST', '/api/v1/departments', { name: 'X'.repeat(81) })).status, 400);
+  eq('malformed department name rejected', (await call('admin', 'POST', '/api/v1/departments', { name: {} })).status, 400);
+  const department = await call('admin', 'POST', '/api/v1/departments', { name: '  Diagnostic   Services  ' });
+  eq('admin adds a normalized department', [department.status, department.body], [201, { name: 'DIAGNOSTIC SERVICES', target: 0 }]);
+  const duplicate = await call('admin', 'POST', '/api/v1/departments', { name: 'diagnostic services' });
+  eq('duplicate department rejected', [duplicate.status, duplicate.body?.fieldErrors], [409, { name: 'already exists' }]);
+  eq('existing seeded department duplicate rejected', (await call('admin', 'POST', '/api/v1/departments', { name: ' airoli ' })).status, 409);
+  const races = await Promise.all([1, 2].map(() => call('admin', 'POST', '/api/v1/departments', { name: 'Wellness' })));
+  eq('simultaneous duplicate saves create one department', races.map(r => r.status).sort(), [201, 409]);
+  eq('new departments follow existing ones', (await call('admin', 'GET', '/api/v1/departments')).body.map(d => d.name),
+    ['AIROLI', 'MDSA', 'CORPORATE', 'BD', 'CAMPAIGN', 'DIAGNOSTIC SERVICES', 'WELLNESS']);
+  check('accounts sees new department', (await call('accounts', 'GET', '/api/v1/departments')).body.some(d => d.name === 'DIAGNOSTIC SERVICES'));
+  eq('staff department scope preserved after add', (await call('staff', 'GET', '/api/v1/departments')).body.map(d => d.name), ['AIROLI']);
+  const customStaff = await call('admin', 'POST', '/api/v1/staff', { name: 'Department Check', dept: department.body.name, individualTarget: 50000 });
+  eq('staff can be assigned to a new department', [customStaff.status, customStaff.body?.dept], [201, 'DIAGNOSTIC SERVICES']);
+  eq('new department target can be updated', (await call('admin', 'PUT', '/api/v1/departments/DIAGNOSTIC%20SERVICES', { target: 50000 })).body?.target, 50000);
+  await call('admin', 'DELETE', `/api/v1/staff/${customStaff.body.id}`);
+  const departmentAudits = await sql`select row_id, after from public.audit_log where table_name = 'departments' and action = 'CREATE'`;
+  eq('only successful department creates audited', departmentAudits.length, 2);
+  check('department create audit records target', departmentAudits.some(a => a.row_id === 'DIAGNOSTIC SERVICES' && a.after.target === 0));
+
   // ---- Staff add / remove ---------------------------------------------------------------------------------------
   const bad = await call('admin', 'POST', '/api/v1/staff', { dept: 'NOPE', individualTarget: -5 });
   eq('new staff validation', bad.body?.fieldErrors, { name: 'must not be blank', individualTarget: 'must be greater than or equal to 0' });

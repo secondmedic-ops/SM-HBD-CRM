@@ -1,6 +1,6 @@
 export type Role = 'Admin' | 'Accounts team' | 'Incharge' | 'Staff';
 
-export type DepartmentName = 'AIROLI' | 'MDSA' | 'CORPORATE' | 'BD' | 'CAMPAIGN';
+export type DepartmentName = string;
 
 export interface Department {
   name: DepartmentName;

@@ -74,6 +74,17 @@
             "description": "OK"
           }
         }
+      },
+      "post": {
+        "summary": "Add a department ({name}; target starts at zero)",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "201": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/api/v1/departments/{name}": {

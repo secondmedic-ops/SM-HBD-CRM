@@ -78,6 +78,7 @@ interface AppContextType {
   /** Changes show at once and are saved shortly after typing stops. */
   updateStaff: (id: string, staff: Partial<Staff>) => void;
   deleteStaff: (id: string) => Promise<boolean>;
+  addDepartment: (name: string) => Promise<Department | null>;
   updateDepartmentTarget: (deptName: DepartmentName, target: number) => Promise<boolean>;
   addDailyUpdate: (update: { date: string; staffId?: string; updateText: string; clientMetCount: number }) => Promise<boolean>;
   addClient: (client: ClientInput) => Promise<Client | null>;
@@ -278,6 +279,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addStaff = (staff: StaffInput) => attempt(async () => { await api.addStaff(staff); await loadStaff(); });
   const deleteStaff = (id: string) => attempt(async () => { await api.deleteStaff(id); await loadStaff(); });
 
+  const addDepartment = async (name: string): Promise<Department | null> => {
+    try {
+      const saved = await api.addDepartment(name);
+      setDepartments(prev => [...prev, saved]);
+      setNotice({ kind: 'ok', text: 'Department added. You can now assign staff to it.' });
+      return saved;
+    } catch (e) {
+      fail(e);
+      return null;
+    }
+  };
+
   const updateDepartmentTarget = (deptName: DepartmentName, target: number) =>
     attempt(async () => {
       const d = await api.setDepartmentTarget(deptName, target);
@@ -361,6 +374,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addStaff,
         updateStaff,
         deleteStaff,
+        addDepartment,
         updateDepartmentTarget,
         addDailyUpdate,
         addClient,

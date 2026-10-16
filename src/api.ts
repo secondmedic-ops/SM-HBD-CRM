@@ -144,6 +144,7 @@ export const api = {
   me: () => request<ApiMe>('/api/v1/me'),
 
   departments: () => request<Department[]>('/api/v1/departments'),
+  addDepartment: (name: string) => request<Department>('/api/v1/departments', { method: 'POST', body: json({ name }) }),
   setDepartmentTarget: (name: string, target: number) =>
     request<Department>(`/api/v1/departments/${encodeURIComponent(name)}`, { method: 'PUT', body: json({ target }) }),
 

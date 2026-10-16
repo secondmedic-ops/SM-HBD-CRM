@@ -26,6 +26,24 @@ export async function listDepartments(c: Ctx) {
   return rows.map((r) => ({ name: r.name, target: n(r.target) }));
 }
 
+/** POST /departments {name}. New department targets start at zero; the screens total their staff targets. */
+export async function createDepartment(c: Ctx, body: unknown) {
+  const b = obj(body);
+  const name = (str(b.name) ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+  const ch = new Check();
+  ch.notBlank('name', name);
+  ch.maxLen('name', name, 80);
+  ch.done();
+  return c.sql.begin(async (tx) => {
+    const [row] = await tx`insert into public.departments (name, target, sort_order)
+      select ${name}, 0, coalesce(max(sort_order), 0) + 1 from public.departments
+      on conflict (name) do nothing returning name, target::text`;
+    if (!row) throw new ApiError(409, 'This department already exists.', { name: 'already exists' });
+    await audit(tx, c.user.id, 'CREATE', 'departments', name, null, { target: 0 });
+    return { name: row.name, target: n(row.target) };
+  });
+}
+
 /** PUT /departments/{name} {target} */
 export async function setDepartmentTarget(c: Ctx, body: unknown) {
   const b = obj(body);
