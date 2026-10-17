@@ -10,7 +10,6 @@
   "compatibility_date": "2026-09-01",
   // postgres.js talks to Supabase over TCP (cloudflare:sockets) and needs the Node.js compatibility layer.
   "compatibility_flags": ["nodejs_compat"],
-  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true },
 
   "assets": {

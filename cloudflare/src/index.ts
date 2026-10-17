@@ -98,22 +98,33 @@ async function api(req: Request, env: Env, ctx: ExecutionContext): Promise<Respo
   }
 }
 
+let lastPurge = 0;
+
+async function runDepartmentPurge(env: Env): Promise<void> {
+  const sql = connect(env);
+  try {
+    await sql`select public.purge_deleted_departments()`;
+    clearAccessCache();
+  } catch (e) {
+    await reportIssue(env, { component: 'department-cleanup', title: 'Department cleanup failed', errorMessage: String((e as Error).message) });
+    throw e;
+  } finally {
+    await sql.end({ timeout: 2 });
+  }
+}
+
 export default {
   async scheduled(_event: ScheduledController, env: Env): Promise<void> {
-    const sql = connect(env);
-    try {
-      await sql`select public.purge_deleted_departments()`;
-      clearAccessCache();
-    } catch (e) {
-      await reportIssue(env, { component: 'department-cleanup', title: 'Department cleanup failed', errorMessage: String((e as Error).message) });
-      throw e;
-    } finally {
-      await sql.end({ timeout: 2 });
-    }
+    await runDepartmentPurge(env);
   },
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+      const now = Date.now();
+      if (now - lastPurge > 5 * 60 * 1000 || url.pathname.startsWith('/api/v1/departments')) {
+        lastPurge = now;
+        ctx.waitUntil(runDepartmentPurge(env).catch(() => {}));
+      }
       try {
         return await api(req, env, ctx);
       } catch (e) {
