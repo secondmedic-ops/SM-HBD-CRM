@@ -21,8 +21,8 @@ const n = (v: unknown) => (v === null || v === undefined ? 0 : Number(v));
 /** ADMIN / ACCOUNTS: all departments. INCHARGE / STAFF: only their own department (no other department's target). */
 export async function listDepartments(c: Ctx) {
   const { sql } = c;
-  const own = c.user.role === 'ADMIN' || c.user.role === 'ACCOUNTS' ? sql`` : sql`where name = ${c.user.dept ?? '-'}`;
-  const rows = await sql`select name, target::text from public.departments ${own} order by sort_order, name`;
+  const own = c.user.role === 'ADMIN' || c.user.role === 'ACCOUNTS' ? sql`` : sql`and name = ${c.user.dept ?? '-'}`;
+  const rows = await sql`select name, target::text from public.departments where deleted_at is null ${own} order by sort_order, name`;
   return rows.map((r) => ({ name: r.name, target: n(r.target) }));
 }
 
@@ -38,7 +38,7 @@ export async function createDepartment(c: Ctx, body: unknown) {
     const [row] = await tx`insert into public.departments (name, target, sort_order)
       select ${name}, 0, coalesce(max(sort_order), 0) + 1 from public.departments
       on conflict (name) do nothing returning name, target::text`;
-    if (!row) throw new ApiError(409, 'This department already exists.', { name: 'already exists' });
+    if (!row) throw new ApiError(409, 'This department already exists or is in its five-day deletion hold.', { name: 'already exists' });
     await audit(tx, c.user.id, 'CREATE', 'departments', name, null, { target: 0 });
     return { name: row.name, target: n(row.target) };
   });
@@ -55,13 +55,24 @@ export async function setDepartmentTarget(c: Ctx, body: unknown) {
   ch.done();
   const name = c.params.name;
   return c.sql.begin(async (tx) => {
-    const [before] = await tx`select name, target::text from public.departments where name = ${name} for update`;
+    const [before] = await tx`select name, target::text from public.departments where name = ${name} and deleted_at is null for update`;
     if (!before) throw notFound('Department', name);
     const t = money(target!).toFixed(2);
     await tx`update public.departments set target = ${t}, updated_at = now() where name = ${name}`;
     await audit(tx, c.user.id, 'UPDATE', 'departments', name, { target: n(before.target) }, { target: Number(t) });
     return { name, target: Number(t) };
   });
+}
+
+/** Hide the department now; all related records remain untouched for five days. */
+export async function deleteDepartment(c: Ctx) {
+  await c.sql.begin(async (tx) => {
+    const [row] = await tx`update public.departments set deleted_at = now(), updated_at = now()
+      where name = ${c.params.name} and deleted_at is null returning name`;
+    if (!row) throw notFound('Department', c.params.name);
+    await audit(tx, c.user.id, 'DELETE', 'departments', row.name, null, { retentionDays: 5 });
+  });
+  clearAccessCache();
 }
 
 // ---- Staff -------------------------------------------------------------------------------------------------------
@@ -90,8 +101,8 @@ const selectStaff = (c: Ctx) => c.sql`
   select s.id::text, s.name, s.dept, s.role, s.designation, s.project, s.individual_target::text, s.email,
          s.incharge_id::text, i.name as incharge_name,
          (s.email is not null and exists (select 1 from auth.users u where lower(u.email) = lower(s.email))) as has_login
-  from public.staff s join public.departments d on d.name = s.dept
-  left join public.staff i on i.id = s.incharge_id and i.active`;
+  from public.staff s join public.departments d on d.name = s.dept and d.deleted_at is null
+  left join public.staff i on i.id = s.incharge_id and i.active and i.dept in (select name from public.departments where deleted_at is null)`;
 
 /**
  * ADMIN / ACCOUNTS: everyone. INCHARGE: their department and their own team. STAFF: their department, themselves and
@@ -167,7 +178,7 @@ function parseStaff(body: unknown, full: boolean): StaffInput {
 
 async function assertDept(c: Ctx, dept: string | undefined) {
   if (!dept) return;
-  const [d] = await c.sql`select 1 from public.departments where name = ${dept}`;
+  const [d] = await c.sql`select 1 from public.departments where name = ${dept} and deleted_at is null`;
   if (!d) throw new ApiError(400, 'Validation failed', { dept: 'is not a department' });
 }
 
@@ -176,7 +187,7 @@ async function assertDept(c: Ctx, dept: string | undefined) {
  * who (directly or further down) reports to that person, so the chain never loops.
  */
 async function loadIncharge(c: Ctx, id: string, self: string | null): Promise<{ id: string; dept: string }> {
-  const [i] = await c.sql`select id::text, dept from public.staff where id = ${id}::uuid and active and role = 'Incharge'`;
+  const [i] = await c.sql`select id::text, dept from public.staff where id = ${id}::uuid and active and dept in (select name from public.departments where deleted_at is null) and role = 'Incharge'`;
   if (!i || id === self) throw new ApiError(400, 'Validation failed', { inchargeId: 'is not an incharge' });
   if (self) {
     const [loop] = await c.sql`with recursive t(id) as (select ${self}::uuid union select s.id from public.staff s join t on s.incharge_id = t.id)
@@ -239,7 +250,7 @@ export async function createStaff(c: Ctx, body: unknown) {
 export async function updateStaff(c: Ctx, body: unknown) {
   const id = uuidParam(c.params.id, 'Staff member');
   const v = parseStaff(body, false);
-  const [cur] = await c.sql`select id::text, dept, role, incharge_id::text from public.staff where id = ${id}::uuid and active`;
+  const [cur] = await c.sql`select id::text, dept, role, incharge_id::text from public.staff where id = ${id}::uuid and active and dept in (select name from public.departments where deleted_at is null)`;
   if (!cur) throw notFound('Staff member', id);
   if (c.user.role === 'INCHARGE') {
     if (cur.id === c.user.staffId) throw forbidden('Only the admin can change an incharge\'s own row.');
@@ -259,7 +270,7 @@ export async function updateStaff(c: Ctx, body: unknown) {
   await assertEmailFree(c, v.email, id);
   await c.sql.begin(async (tx) => {
     const [before] = await tx`select dept, role, individual_target::text, email, incharge_id::text from public.staff
-                              where id = ${id}::uuid and active for update`;
+                              where id = ${id}::uuid and active and dept in (select name from public.departments where deleted_at is null) for update`;
     if (!before) throw notFound('Staff member', id);
     const after = {
       dept: v.dept ?? before.dept, role, individual_target: v.individualTarget ? v.individualTarget.toFixed(2) : before.individual_target,
@@ -289,7 +300,7 @@ export async function deleteStaff(c: Ctx) {
   const id = uuidParam(c.params.id, 'Staff member');
   await c.sql.begin(async (tx) => {
     const [before] = await tx`select id::text, dept, role, individual_target::text, email, incharge_id::text from public.staff
-                              where id = ${id}::uuid and active for update`;
+                              where id = ${id}::uuid and active and dept in (select name from public.departments where deleted_at is null) for update`;
     if (!before) throw notFound('Staff member', id);
     if (c.user.role === 'INCHARGE' && (before.id === c.user.staffId || !c.user.teamIds.includes(before.id))) {
       if (before.id === c.user.staffId) throw forbidden('Only the admin can remove an incharge.');

@@ -49,7 +49,7 @@ export function connect(env: Env): Sql {
  * pipeline before deploy.
  */
 export const SCHEMA: Record<string, string[]> = {
-  departments: ['name', 'target', 'sort_order', 'updated_at'],
+  departments: ['name', 'target', 'sort_order', 'updated_at', 'deleted_at'],
   staff: ['id', 'name', 'dept', 'role', 'designation', 'project', 'individual_target', 'email', 'active', 'incharge_id', 'created_at', 'updated_at'],
   attachments: ['id', 'mime', 'data', 'bytes', 'created_by', 'created_at'],
   revenue_entries: ['id', 'entry_date', 'staff_id', 'dept', 'client', 'type', 'amount', 'cost', 'is_new_client', 'amount_received',

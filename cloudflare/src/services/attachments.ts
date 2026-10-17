@@ -30,7 +30,9 @@ export async function saveImage(db: Db, userId: string, img: { dataUrl: string; 
 
 export async function deleteImages(db: Db, ids: (string | null | undefined)[]): Promise<void> {
   const list = ids.filter((x): x is string => !!x);
-  if (list.length) await db`delete from public.attachments where id in ${db(list)}`;
+  if (list.length) await db`delete from public.attachments a where id in ${db(list)}
+    and not exists (select 1 from public.revenue_entries r where r.slip_id = a.id)
+    and not exists (select 1 from public.outstanding_payments o where o.screenshot_id = a.id)`;
 }
 
 /** GET /attachments/{id}: the image, when the caller may see the revenue entry / outstanding row that uses it. */

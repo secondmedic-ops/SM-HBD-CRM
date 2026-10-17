@@ -80,7 +80,7 @@ writeFileSync(envFile, [
 let log = '';
 const noProxy = ['127.0.0.1', 'localhost', process.env.NO_PROXY].filter(Boolean).join(',');
 const worker = spawn('npx', ['wrangler', 'dev', '--ip', '127.0.0.1', '--port', String(PORT), '--env-file', envFile,
-  '--show-interactive-dev-session=false', '--log-level', 'warn'], {
+  '--test-scheduled', '--show-interactive-dev-session=false', '--log-level', 'warn'], {
   cwd: join(root, 'cloudflare'), shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'],
   detached: process.platform !== 'win32', // own process group, so stopping it also stops workerd
   // The Worker reaches the database through its Hyperdrive binding, exactly as in production.

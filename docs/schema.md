@@ -84,6 +84,7 @@
 | target | numeric | NO |
 | sort_order | integer | NO |
 | updated_at | timestamp with time zone | NO |
+| deleted_at | timestamp with time zone | YES |
 
 ## deployments
 | column | type | nullable |

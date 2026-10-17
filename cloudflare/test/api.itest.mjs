@@ -357,6 +357,73 @@ export async function runApiTests({ base, token, sql, wrongKey }) {
   eq('remove accounts email: 204', (await call('admin', 'DELETE', `/api/v1/admin/accounts-logins/${encodeURIComponent(email('accounts'))}`)).status, 204);
   eq('removed accounts login has no role', (await call('accounts', 'GET', '/api/v1/revenue')).status, 403);
 
+  // ---- Department deletion and its five-day hold, including the actual scheduled Worker handler -------------------
+  const retainedDept = 'WELLNESS';
+  const retainedPath = '/api/v1/departments/' + encodeURIComponent(retainedDept);
+  eq('department deletion requires login', (await call(null, 'DELETE', retainedPath)).status, 401);
+  for (const who of ['staff', 'incharge', 'other', 'accounts', 'norole']) {
+    eq(`${who} cannot delete a department`, (await call(who, 'DELETE', retainedPath)).status, 403);
+  }
+  eq('missing department deletion returns 404', (await call('admin', 'DELETE', '/api/v1/departments/MISSING')).status, 404);
+  const retainedStaff = (await call('admin', 'POST', '/api/v1/staff', { name: 'Retention Tester', dept: retainedDept,
+    role: 'Incharge', email: email('norole') })).body;
+  const retainedClient = (await call('admin', 'POST', '/api/v1/clients', { name: 'Retention Clinic', staffId: retainedStaff.id })).body;
+  const retainedVisit = (await call('admin', 'POST', '/api/v1/visits', { clientId: retainedClient.id, date: todayIst(), notes: 'Retained visit' })).body;
+  const retainedRevenue = (await call('admin', 'POST', '/api/v1/revenue', { date: D, staffId: retainedStaff.id,
+    clientId: retainedClient.id, client: 'Retention Clinic', patientName: 'Retention Patient', type: 'Corporate', amount: 1000, paymentStatus: 'Outstanding', dueDate: D, slipImage: PNG })).body;
+  const retainedOut = (await call('admin', 'POST', '/api/v1/outstanding', { client: 'Retention Clinic', staffId: retainedStaff.id, amount: 500, dueDate: D, screenshot: PNG })).body;
+  const retainedUpdate = (await call('admin', 'POST', '/api/v1/daily-updates', { date: todayIst(), staffId: retainedStaff.id, updateText: 'Retention update', clientMetCount: 1 })).body;
+  check('retention fixtures created', retainedStaff.id && retainedClient.id && retainedRevenue.id && retainedOut.id && retainedVisit.id && retainedUpdate.id,
+    JSON.stringify({ retainedStaff, retainedClient, retainedRevenue, retainedOut, retainedVisit, retainedUpdate }));
+  eq('department login works before deletion', (await call('norole', 'GET', '/api/v1/me')).body?.role, 'INCHARGE');
+  const unaffected = await sql`select count(*)::int as n from public.revenue_entries where dept <> ${retainedDept}`;
+  const [sharedImage] = await sql`select slip_id::text as id from public.revenue_entries where id = ${retainedRevenue.id}::uuid`;
+  const otherOut = (await call('admin', 'POST', '/api/v1/outstanding', { client: 'Other Clinic', staffId: supriya.id, amount: 200, dueDate: D })).body;
+  await sql`update public.outstanding_payments set screenshot_id = ${sharedImage.id}::uuid where id = ${otherOut.id}::uuid`;
+  eq('admin deletes department', (await call('admin', 'DELETE', retainedPath)).status, 204);
+  eq('repeat deletion does not restart the clock', (await call('admin', 'DELETE', retainedPath)).status, 404);
+  check('deleted department hidden', !(await call('admin', 'GET', '/api/v1/departments')).body.some(d => d.name === retainedDept));
+  check('deleted department staff hidden', !(await call('admin', 'GET', '/api/v1/staff')).body.some(s => s.id === retainedStaff.id));
+  for (const [path, id] of [['clients', retainedClient.id], ['revenue', retainedRevenue.id], ['outstanding', retainedOut.id], ['visits', retainedVisit.id], ['daily-updates', retainedUpdate.id]]) {
+    check(`retained ${path} hidden from admin`, !(await call('admin', 'GET', '/api/v1/' + path)).body.some(r => r.id === id));
+  }
+  eq('deleted department staff login revoked', (await call('norole', 'GET', '/api/v1/revenue')).status, 403);
+  eq('retained image hidden', (await call('admin', 'GET', `/api/v1/attachments/${retainedOut.screenshotId}`)).status, 404);
+  eq('cannot change retained target', (await call('admin', 'PUT', retainedPath, { target: 10 })).status, 404);
+  eq('cannot move retained staff out of hold', (await call('admin', 'PUT', `/api/v1/staff/${retainedStaff.id}`, { dept: 'BD' })).status, 404);
+  eq('cannot delete retained staff early', (await call('admin', 'DELETE', `/api/v1/staff/${retainedStaff.id}`)).status, 404);
+  eq('cannot delete retained revenue early', (await call('admin', 'DELETE', `/api/v1/revenue/${retainedRevenue.id}`)).status, 404);
+  eq('cannot delete retained client early', (await call('admin', 'DELETE', `/api/v1/clients/${retainedClient.id}`)).status, 404);
+  eq('cannot edit retained visit', (await call('admin', 'PUT', `/api/v1/visits/${retainedVisit.id}`, { date: todayIst(), notes: 'Changed' })).status, 404);
+  eq('cannot collect retained payment', (await call('admin', 'POST', `/api/v1/outstanding/${retainedOut.id}/receive`, { amount: 10 })).status, 404);
+  eq('cannot assign staff to retained department', (await call('admin', 'POST', '/api/v1/staff', { name: 'X', dept: retainedDept })).status, 400);
+  eq('cannot reuse department name in hold', (await call('admin', 'POST', '/api/v1/departments', { name: retainedDept })).status, 409);
+  const [hold] = await sql`select count(*)::int as n from public.revenue_entries where id = ${retainedRevenue.id}::uuid`;
+  eq('retained data still stored after deletion', hold.n, 1);
+  let blocked = false;
+  try { await sql`delete from public.revenue_entries where id = ${retainedRevenue.id}::uuid`; } catch (e) { blocked = e.code === '23514'; }
+  check('database protects retained data against early deletion', blocked);
+  await sql`update public.departments set deleted_at = now() - interval '4 days 23 hours 59 minutes' where name = ${retainedDept}`;
+  const [early] = await sql`select public.purge_deleted_departments() as n`;
+  eq('cleanup keeps data for five complete days', early.n, 0);
+  await sql`update public.departments set deleted_at = now() - interval '5 days' where name = ${retainedDept}`;
+  const scheduled = await fetch(base + '/cdn-cgi/local/scheduled?cron=' + encodeURIComponent('*/5 * * * *'));
+  eq('scheduled cleanup handler succeeds', scheduled.status, 200);
+  // The local scheduled endpoint can return before waitUntil tasks; this handler awaits cleanup itself.
+  for (let i = 0; i < 30; i++) {
+    if (!(await sql`select 1 from public.departments where name = ${retainedDept}`).length) break;
+    await new Promise(ok => setTimeout(ok, 100));
+  }
+  eq('department permanently removed after five days', (await sql`select 1 from public.departments where name = ${retainedDept}`).length, 0);
+  for (const [table, id] of [['staff', retainedStaff.id], ['clients', retainedClient.id], ['revenue_entries', retainedRevenue.id], ['outstanding_payments', retainedOut.id], ['client_visits', retainedVisit.id], ['daily_updates', retainedUpdate.id], ['attachments', retainedOut.screenshotId]]) {
+    eq(`expired ${table} permanently removed`, (await sql`select 1 from public.${sql(table)} where id = ${id}::uuid`).length, 0);
+  }
+  eq('shared image used elsewhere preserved', (await sql`select 1 from public.attachments where id = ${sharedImage.id}::uuid`).length, 1);
+  eq('other department revenue preserved', (await sql`select count(*)::int as n from public.revenue_entries where dept <> ${retainedDept}`)[0].n, unaffected[0].n);
+  eq('cleanup retries safely', (await sql`select public.purge_deleted_departments() as n`)[0].n, 0);
+  eq('purge is audited', (await sql`select 1 from public.audit_log where table_name = 'departments' and action = 'PURGE' and row_id = ${retainedDept}`).length, 1);
+  eq('department name reusable after purge', (await call('admin', 'POST', '/api/v1/departments', { name: retainedDept })).status, 201);
+
   // ---- Audit and misc ---------------------------------------------------------------------------------------------
   const audits = await sql`select table_name, action, coalesce(before::text, '') || coalesce(after::text, '') as body from public.audit_log`;
   check('changes are audited', audits.some((a) => a.table_name === 'revenue_entries' && a.action === 'CREATE') && audits.some((a) => a.action === 'RECEIVE'));

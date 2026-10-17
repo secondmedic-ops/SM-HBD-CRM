@@ -9,6 +9,7 @@ export const StaffMappingTab: React.FC = () => {
     staffList,
     departments,
     addDepartment,
+    deleteDepartment,
     revenueEntries,
     addStaff,
     updateStaff,
@@ -25,10 +26,28 @@ export const StaffMappingTab: React.FC = () => {
 
   const [departmentName, setDepartmentName] = useState('');
   const [addingDepartment, setAddingDepartment] = useState(false);
+  const [departmentToDelete, setDepartmentToDelete] = useState('');
+  const [deletingDepartment, setDeletingDepartment] = useState(false);
+
+  const handleDeleteDepartment = async () => {
+    if (!departmentToDelete || addingDepartment || deletingDepartment) return;
+    if (!window.confirm(`Delete department "${departmentToDelete}"? Its staff and related clients, revenue, payments, daily updates, visits and images will be hidden immediately. All this data will be kept for five days, then permanently deleted.`)) return;
+    setDeletingDepartment(true);
+    try {
+      if (await deleteDepartment(departmentToDelete)) {
+        if (newDept === departmentToDelete) setNewDept(departments.find(d => d.name !== departmentToDelete)?.name ?? '');
+        setNewIncharge('');
+        setDepartmentToDelete('');
+      }
+    } finally {
+      setDeletingDepartment(false);
+    }
+  };
 
   const handleAddDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!departmentName.trim() || addingDepartment) return;
+    if (!departmentName.trim() || addingDepartment || deletingDepartment) return;
+    if (!window.confirm(`Create department "${departmentName.trim().replace(/\s+/g, ' ').toUpperCase()}"?`)) return;
     setAddingDepartment(true);
     try {
       const saved = await addDepartment(departmentName);
@@ -143,7 +162,7 @@ export const StaffMappingTab: React.FC = () => {
           Add a department, then assign staff below. Its monthly target is the sum of its staff targets.
         </p>
         <form onSubmit={handleAddDepartment}>
-          <fieldset disabled={addingDepartment} className="flex flex-wrap items-end gap-3">
+          <fieldset disabled={addingDepartment || deletingDepartment} className="flex flex-wrap items-end gap-3">
             <div className="w-full sm:w-72">
               <label htmlFor="department-name" className="block text-xs font-semibold text-slate-700 mb-1">Department name</label>
               <input
@@ -164,8 +183,21 @@ export const StaffMappingTab: React.FC = () => {
             >
               {addingDepartment ? 'Saving...' : 'Add department'}
             </button>
+            <div className="w-full sm:w-64">
+              <label htmlFor="department-to-delete" className="block text-xs font-semibold text-slate-700 mb-1">Department to delete</label>
+              <select id="department-to-delete" value={departmentToDelete} onChange={e => setDepartmentToDelete(e.target.value)}
+                aria-describedby="department-delete-help" className="w-full bg-slate-50 border border-slate-300 px-3 py-2 text-sm">
+                <option value="">Select a department</option>
+                {departments.map(d => <option key={d.name} value={d.name}>{d.name}</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={handleDeleteDepartment} disabled={!departmentToDelete || deletingDepartment}
+              className="px-4 py-2 text-sm font-semibold text-white bg-[#a32929] disabled:opacity-40">
+              {deletingDepartment ? 'Deleting...' : 'Delete department'}
+            </button>
           </fieldset>
         </form>
+        <p id="department-delete-help" className="text-xs text-slate-600 mt-3">Deleted departments and their staff records are hidden immediately. Related data is retained for five days, then permanently removed automatically.</p>
       </section>
 
       {/* Department cards */}

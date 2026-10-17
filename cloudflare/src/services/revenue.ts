@@ -11,7 +11,7 @@ import { d0, money } from '../domain/money';
 import { outstandingFor, PAYMENT_STATUSES, receive, receivedFor, statusOf } from '../domain/payments';
 import { audit } from './audit';
 import { checkImage, deleteImages, saveImage } from './attachments';
-import { assertMayActFor, loadStaff, ownStaffId, rowScope, staffOfRow } from './scope';
+import { assertMayActFor, liveRow, loadStaff, ownStaffId, rowScope, staffOfRow } from './scope';
 import { normalizePhone, visibleClient } from './clients';
 
 const TYPES = ['Individual', 'Corporate'] as const;
@@ -215,7 +215,7 @@ export async function updateRevenue(c: Ctx, body: unknown) {
       select r.entry_date, r.staff_id::text, r.dept, r.type, r.amount::text, r.cost::text, r.amount_received::text, r.slip_id::text,
              o.id::text as out_id, o.amount::text as out_amount, o.amount_paid::text as out_paid
       from public.revenue_entries r left join public.outstanding_payments o on o.revenue_entry_id = r.id
-      where r.id = ${id}::uuid for update of r`;
+      where r.id = ${id}::uuid ${liveRow(c, 'r')} for update of r`;
     if (!old) throw notFound('Revenue entry', id);
     // The entry as it is now must be the caller's too (a STAFF cannot take over someone else's entry).
     assertMayActFor(c, await staffOfRow(tx, old.staff_id));
@@ -250,7 +250,7 @@ export async function deleteRevenue(c: Ctx) {
       select r.entry_date, r.staff_id::text, r.dept, r.type, r.amount::text, r.cost::text, r.amount_received::text, r.slip_id::text,
              o.screenshot_id::text as shot_id
       from public.revenue_entries r left join public.outstanding_payments o on o.revenue_entry_id = r.id
-      where r.id = ${id}::uuid for update of r`;
+      where r.id = ${id}::uuid ${liveRow(c, 'r')} for update of r`;
     if (!old) throw notFound('Revenue entry', id);
     assertMayActFor(c, await staffOfRow(tx, old.staff_id));
     await tx`delete from public.revenue_entries where id = ${id}::uuid`; // its outstanding row goes with it (cascade)
@@ -262,7 +262,7 @@ export async function deleteRevenue(c: Ctx) {
 
 async function entryById(c: Ctx, id: string) {
   const [r] = await c.sql`select ${ENTRY_COLUMNS(c)} from public.revenue_entries r join public.staff s on s.id = r.staff_id
-                          where r.id = ${id}::uuid`;
+                          where r.id = ${id}::uuid ${liveRow(c, 'r')}`;
   if (!r) throw notFound('Revenue entry', id);
   return entryJson(c, r);
 }
@@ -308,7 +308,7 @@ export async function receiveOutstanding(c: Ctx, body: unknown) {
   ch.done();
   await c.sql.begin(async (tx) => {
     const [o] = await tx`select staff_id::text, dept, amount::text, amount_paid::text, revenue_entry_id::text
-                         from public.outstanding_payments where id = ${id}::uuid for update`;
+                         from public.outstanding_payments o where id = ${id}::uuid ${liveRow(c, 'o')} for update`;
     if (!o) throw notFound('Outstanding payment', id);
     assertMayActFor(c, await staffOfRow(tx, o.staff_id));
     const pay = money(x!);
@@ -329,7 +329,7 @@ async function outstandingById(c: Ctx, id: string) {
   const [r] = await c.sql`
     select o.id::text, o.revenue_entry_id::text, o.client, o.staff_id::text, s.name as staff_name, o.dept, o.amount::text,
            o.amount_paid::text, o.due_date, o.screenshot_id::text, o.created_at
-    from public.outstanding_payments o join public.staff s on s.id = o.staff_id where o.id = ${id}::uuid`;
+    from public.outstanding_payments o join public.staff s on s.id = o.staff_id where o.id = ${id}::uuid ${liveRow(c, 'o')}`;
   if (!r) throw notFound('Outstanding payment', id);
   return {
     id: r.id, revenueEntryId: r.revenue_entry_id, client: r.client, staffId: r.staff_id, staffName: r.staff_name, dept: r.dept,

@@ -16,21 +16,31 @@ const teamOf = (c: Ctx, inchargeId: string | null) =>
            union select s.id from public.staff s join t on s.incharge_id = t.id)
          select id from t)`;
 
+/** Exclude both a deleted department's records and records owned by its staff. */
+export function liveRow(c: Ctx, alias: string) {
+  const { sql } = c;
+  return sql`and exists (select 1 from public.departments ld where ld.name = ${sql(alias)}.dept and ld.deleted_at is null)
+    and not exists (select 1 from public.staff ls join public.departments ld on ld.name = ls.dept
+                    where ls.id = ${sql(alias)}.staff_id and ld.deleted_at is not null)`;
+}
+
 /** Row filter for a table with a staff_id column (alias given). */
 export function rowScope(c: Ctx, alias: string) {
   const { sql } = c;
-  if (seesAll(c)) return sql``;
-  if (c.user.role === 'INCHARGE') return sql`and ${sql(alias)}.staff_id in ${teamOf(c, c.user.staffId)}`;
-  return sql`and ${sql(alias)}.staff_id = ${c.user.staffId ?? NOBODY}::uuid`;
+  const live = liveRow(c, alias);
+  if (seesAll(c)) return live;
+  if (c.user.role === 'INCHARGE') return sql`${live} and ${sql(alias)}.staff_id in ${teamOf(c, c.user.staffId)}`;
+  return sql`${live} and ${sql(alias)}.staff_id = ${c.user.staffId ?? NOBODY}::uuid`;
 }
 
 /** Team-wide filter: an INCHARGE sees their team, a STAFF member their incharge's team (or only themselves). */
 export function teamScope(c: Ctx, alias: string) {
   const { sql } = c;
-  if (seesAll(c)) return sql``;
-  if (c.user.role === 'INCHARGE') return sql`and ${sql(alias)}.staff_id in ${teamOf(c, c.user.staffId)}`;
-  if (c.user.inchargeId) return sql`and ${sql(alias)}.staff_id in ${teamOf(c, c.user.inchargeId)}`;
-  return sql`and ${sql(alias)}.staff_id = ${c.user.staffId ?? NOBODY}::uuid`;
+  const live = liveRow(c, alias);
+  if (seesAll(c)) return live;
+  if (c.user.role === 'INCHARGE') return sql`${live} and ${sql(alias)}.staff_id in ${teamOf(c, c.user.staffId)}`;
+  if (c.user.inchargeId) return sql`${live} and ${sql(alias)}.staff_id in ${teamOf(c, c.user.inchargeId)}`;
+  return sql`${live} and ${sql(alias)}.staff_id = ${c.user.staffId ?? NOBODY}::uuid`;
 }
 
 export interface StaffRef {
@@ -44,7 +54,7 @@ export interface StaffRef {
 /** An active staff member, or 400 (a form names someone who was removed meanwhile). */
 export async function loadStaff(db: Db, id: string | null): Promise<StaffRef> {
   if (!id || !/^[0-9a-fA-F-]{36}$/.test(id)) throw new ApiError(400, 'Validation failed', { staffId: 'must not be blank' });
-  const [s] = await db`select id::text, name, dept, incharge_id::text from public.staff where id = ${id}::uuid and active`;
+  const [s] = await db`select id::text, name, dept, incharge_id::text from public.staff where id = ${id}::uuid and active and dept in (select name from public.departments where deleted_at is null)`;
   if (!s) throw new ApiError(400, 'Validation failed', { staffId: 'is not an active staff member' });
   return s as unknown as StaffRef;
 }

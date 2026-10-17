@@ -145,6 +145,7 @@ export const api = {
 
   departments: () => request<Department[]>('/api/v1/departments'),
   addDepartment: (name: string) => request<Department>('/api/v1/departments', { method: 'POST', body: json({ name }) }),
+  deleteDepartment: (name: string) => request<void>(`/api/v1/departments/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   setDepartmentTarget: (name: string, target: number) =>
     request<Department>(`/api/v1/departments/${encodeURIComponent(name)}`, { method: 'PUT', body: json({ target }) }),
 

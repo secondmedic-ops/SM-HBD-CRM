@@ -88,6 +88,17 @@
       }
     },
     "/api/v1/departments/{name}": {
+      "delete": {
+        "summary": "Delete a department and retain related data for five days before automatic permanent removal",
+        "x-access": [
+          "ADMIN"
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          }
+        }
+      },
       "put": {
         "summary": "Set a department target ({target})",
         "x-access": [

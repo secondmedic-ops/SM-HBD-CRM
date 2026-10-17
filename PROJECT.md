@@ -27,6 +27,7 @@ on free plans.
   - **STAFF**: email on a staff row with role Team. Only their own entries, outstanding and clients (never cost or
     profit), their team's daily updates; cannot delete entries.
   - A login whose email is in none of these has no role and sees nothing.
+- Departments: ADMIN confirms creation or deletion in Staff mapping. Deletion hides the department and its staff-related data immediately; `deleted_at` starts a five-day hold. The Worker checks every five minutes and calls `purge_deleted_departments()` to remove expired departments, their staff, related business records and unshared images. Names remain reserved during the hold. Independent admin/accounts roles and Supabase Auth accounts are preserved.
 - Departments: ADMIN adds departments in Staff mapping > Departments. Names are trimmed, uppercased and unique; new departments appear in staff selectors and filters. Displayed targets total the saved staff targets.
 - Logins: Staff mapping > Create login (ADMIN) makes the Supabase user or sets a new password. It needs the Worker
   secret `SUPABASE_SERVICE_ROLE_KEY`, set once with `STAFF-LOGINS-KEY.bat`.

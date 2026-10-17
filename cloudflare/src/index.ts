@@ -8,6 +8,7 @@ import { errorResponse, json, noContent, readJson, toResponse } from './api/http
 import { contract, match } from './api/routes';
 import { connect, schemaProblems, Sql } from './db';
 import { Env } from './env';
+import { clearAccessCache } from './api/auth';
 import { reportIssue } from './systemTracker';
 
 export type { Env };
@@ -98,6 +99,18 @@ async function api(req: Request, env: Env, ctx: ExecutionContext): Promise<Respo
 }
 
 export default {
+  async scheduled(_event: ScheduledController, env: Env): Promise<void> {
+    const sql = connect(env);
+    try {
+      await sql`select public.purge_deleted_departments()`;
+      clearAccessCache();
+    } catch (e) {
+      await reportIssue(env, { component: 'department-cleanup', title: 'Department cleanup failed', errorMessage: String((e as Error).message) });
+      throw e;
+    } finally {
+      await sql.end({ timeout: 2 });
+    }
+  },
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {

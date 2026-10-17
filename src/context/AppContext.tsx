@@ -78,6 +78,7 @@ interface AppContextType {
   /** Changes show at once and are saved shortly after typing stops. */
   updateStaff: (id: string, staff: Partial<Staff>) => void;
   deleteStaff: (id: string) => Promise<boolean>;
+  deleteDepartment: (name: string) => Promise<boolean>;
   addDepartment: (name: string) => Promise<Department | null>;
   updateDepartmentTarget: (deptName: DepartmentName, target: number) => Promise<boolean>;
   addDailyUpdate: (update: { date: string; staffId?: string; updateText: string; clientMetCount: number }) => Promise<boolean>;
@@ -291,6 +292,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const deleteDepartment = (name: string) => attempt(async () => {
+    await api.deleteDepartment(name);
+    // Cancel pending staff edits which would otherwise try to save retained records.
+    for (const [id, p] of pending.current) {
+      if (staffList.some(s => s.id === id && s.dept === name)) {
+        window.clearTimeout(p.timer);
+        pending.current.delete(id);
+      }
+    }
+    setFilters({ dept: 'ALL', staffId: 'ALL' });
+    await reload();
+  }, 'Department deleted. Its data is retained for five days, then permanently removed automatically.');
+
   const updateDepartmentTarget = (deptName: DepartmentName, target: number) =>
     attempt(async () => {
       const d = await api.setDepartmentTarget(deptName, target);
@@ -375,6 +389,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateStaff,
         deleteStaff,
         addDepartment,
+        deleteDepartment,
         updateDepartmentTarget,
         addDailyUpdate,
         addClient,

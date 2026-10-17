@@ -8,7 +8,7 @@ import { getAttachment } from '../services/attachments';
 import { createClient, createVisit, deleteClient, deleteVisit, listClients, listVisits, updateClient, updateVisit } from '../services/clients';
 import { addAccountsLogin, listAccountsLogins, removeAccountsLogin, setLogin } from '../services/logins';
 import { createOutstanding, createRevenue, deleteRevenue, listOutstanding, listRevenue, receiveOutstanding, updateRevenue } from '../services/revenue';
-import { createDepartment, createStaff, deleteStaff, listDepartments, listStaff, setDepartmentTarget, updateStaff } from '../services/staff';
+import { createDepartment, createStaff, deleteDepartment, deleteStaff, listDepartments, listStaff, setDepartmentTarget, updateStaff } from '../services/staff';
 import { createUpdate, listUpdates } from '../services/updates';
 
 export type Access = 'public' | 'login' | readonly Role[];
@@ -37,6 +37,7 @@ export const ROUTES: Route[] = [
 
   { method: 'GET', path: '/api/v1/departments', access: ALL, summary: 'Departments with monthly targets (INCHARGE / STAFF: only their own)', handler: listDepartments },
   { method: 'POST', path: '/api/v1/departments', access: ADMIN, status: 201, summary: 'Add a department ({name}; target starts at zero)', handler: createDepartment },
+  { method: 'DELETE', path: '/api/v1/departments/{name}', access: ADMIN, status: 204, summary: 'Delete a department and retain related data for five days before automatic permanent removal', handler: deleteDepartment },
   { method: 'PUT', path: '/api/v1/departments/{name}', access: ADMIN, summary: 'Set a department target ({target})', handler: setDepartmentTarget },
 
   { method: 'GET', path: '/api/v1/staff', access: ALL, summary: 'Active staff with their incharge (INCHARGE / STAFF: own department, team and incharge only; email: ADMIN, INCHARGE for own team)', handler: listStaff },

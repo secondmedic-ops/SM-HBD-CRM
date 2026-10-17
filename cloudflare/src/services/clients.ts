@@ -9,7 +9,7 @@ import type { Db } from '../db';
 import { addDays, todayIst } from '../domain/dates';
 import { ApiError, forbidden, notFound } from '../domain/errors';
 import { audit } from './audit';
-import { assertMayActFor, inMyScope, loadStaff, rowScope, seesAll } from './scope';
+import { assertMayActFor, inMyScope, loadStaff, liveRow, rowScope, seesAll } from './scope';
 
 export const CLIENT_TYPES = ['Individual', 'Corporate'] as const;
 export const CLIENT_STATUSES = ['Lead', 'Active', 'Inactive'] as const;
@@ -46,9 +46,9 @@ const sees = (c: Ctx, r: ClientRow) => inMyScope(c, { id: r.staff_id, incharge_i
 export async function visibleClient(db: Db, c: Ctx, id: string, lock = false): Promise<ClientRow> {
   const rows = lock
     ? await db`select cl.id::text, cl.name, cl.staff_id::text, s.incharge_id::text as owner_incharge, cl.dept, cl.status, cl.type
-               from public.clients cl join public.staff s on s.id = cl.staff_id where cl.id = ${id}::uuid for update of cl`
+               from public.clients cl join public.staff s on s.id = cl.staff_id where cl.id = ${id}::uuid ${liveRow(c, 'cl')} for update of cl`
     : await db`select cl.id::text, cl.name, cl.staff_id::text, s.incharge_id::text as owner_incharge, cl.dept, cl.status, cl.type
-               from public.clients cl join public.staff s on s.id = cl.staff_id where cl.id = ${id}::uuid`;
+               from public.clients cl join public.staff s on s.id = cl.staff_id where cl.id = ${id}::uuid ${liveRow(c, 'cl')}`;
   const r = rows[0] as unknown as ClientRow | undefined;
   if (!r || !sees(c, r)) throw notFound('Client', id);
   return r;
@@ -73,9 +73,9 @@ const CLIENT_SELECT = (c: Ctx) => c.sql`
   join public.staff s on s.id = cl.staff_id
   left join lateral (
     select count(*) as visit_count, max(cv.visit_date) as last_visit,
-           (select cv2.next_follow_up from public.client_visits cv2 where cv2.client_id = cl.id
+           (select cv2.next_follow_up from public.client_visits cv2 where cv2.client_id = cl.id and cv2.staff_id in (select s.id from public.staff s join public.departments d on d.name = s.dept where d.deleted_at is null)
             order by cv2.visit_date desc, cv2.created_at desc limit 1) as next_follow_up
-    from public.client_visits cv where cv.client_id = cl.id) v on true`;
+    from public.client_visits cv where cv.client_id = cl.id and cv.staff_id in (select s.id from public.staff s join public.departments d on d.name = s.dept where d.deleted_at is null)) v on true`;
 
 /** GET /clients ?q= (name / contact / phone / city) ?status= */
 export async function listClients(c: Ctx) {
@@ -223,7 +223,7 @@ export async function deleteClient(c: Ctx) {
 }
 
 async function clientById(c: Ctx, id: string) {
-  const [r] = await c.sql`${CLIENT_SELECT(c)} where cl.id = ${id}::uuid`;
+  const [r] = await c.sql`${CLIENT_SELECT(c)} where cl.id = ${id}::uuid ${liveRow(c, 'cl')}`;
   if (!r) throw notFound('Client', id);
   return clientJson(r);
 }
@@ -240,7 +240,7 @@ function visitJson(r: Record<string, any>) {
 const VISIT_SELECT = (c: Ctx) => c.sql`
   select v.id::text, v.client_id::text, cl.name as client_name, v.staff_id::text, s.name as staff_name, v.visit_date, v.kind,
          v.purpose, v.notes, v.next_follow_up, v.created_at
-  from public.client_visits v join public.clients cl on cl.id = v.client_id join public.staff s on s.id = v.staff_id`;
+  from public.client_visits v join public.clients cl on cl.id = v.client_id join public.staff s on s.id = v.staff_id and s.dept in (select name from public.departments where deleted_at is null)`;
 
 /** GET /visits ?clientId= ?from= ?to= (visit date) */
 export async function listVisits(c: Ctx) {
@@ -315,7 +315,7 @@ export async function createVisit(c: Ctx, body: unknown) {
 }
 
 async function visibleVisit(db: Db, c: Ctx, id: string) {
-  const [v] = await db`select v.id::text, v.client_id::text, v.visit_date, v.kind from public.client_visits v where v.id = ${id}::uuid`;
+  const [v] = await db`select v.id::text, v.client_id::text, v.visit_date, v.kind from public.client_visits v where v.id = ${id}::uuid and v.staff_id in (select s.id from public.staff s join public.departments d on d.name = s.dept where d.deleted_at is null)`;
   if (!v) throw notFound('Visit', id);
   try {
     await visibleClient(db, c, v.client_id);

@@ -80,7 +80,12 @@ export async function verifyToken(req: Request, env: Env): Promise<{ id: string;
 export async function accessOf(db: Db, userId: string, email: string | null): Promise<Access> {
   const now = Date.now();
   const c = accessCache.get(userId);
-  if (c && now - c.at < CACHE_MS) return c;
+  if (c && now - c.at < CACHE_MS) {
+    if (!c.staffId) return c;
+    const [live] = await db`select 1 from public.staff s join public.departments d on d.name = s.dept
+      where s.id = ${c.staffId}::uuid and s.active and d.deleted_at is null`;
+    if (live) return c;
+  }
   if (!/^[0-9a-fA-F-]{36}$/.test(userId)) return { role: null, staffId: null, staffName: null, dept: null, inchargeId: null, teamIds: [] };
   const mail = (email || '').trim().toLowerCase();
   const [row] = await db`
@@ -88,14 +93,15 @@ export async function accessOf(db: Db, userId: string, email: string | null): Pr
            exists (select 1 from public.accounts_logins a where a.email = ${mail}) as accounts,
            s.id::text as staff_id, s.name as staff_name, s.dept, s.role as staff_role, s.incharge_id::text as incharge_id
     from (select 1) one
-    left join public.staff s on ${mail} <> '' and lower(s.email) = ${mail} and s.active`;
+    left join public.staff s on ${mail} <> '' and lower(s.email) = ${mail} and s.active
+      and s.dept in (select name from public.departments where deleted_at is null)`;
   const set = row?.role && (ROLES as readonly string[]).includes(String(row.role)) ? (String(row.role) as Role) : null;
   const role: Role | null = set ?? (row?.accounts ? 'ACCOUNTS' : row?.staff_id ? (row.staff_role === 'Incharge' ? 'INCHARGE' : 'STAFF') : null);
   // The reporting chain below an incharge (cycles are refused when saving, and `union` stops one anyway).
   let teamIds: string[] = [];
   if (role === 'INCHARGE' && row?.staff_id) {
     const t = await db`with recursive t(id) as (select ${row.staff_id}::uuid
-                         union select s.id from public.staff s join t on s.incharge_id = t.id where s.active)
+                         union select s.id from public.staff s join t on s.incharge_id = t.id where s.active and s.dept in (select name from public.departments where deleted_at is null))
                        select id::text from t`;
     teamIds = t.map((x) => String(x.id));
   }
